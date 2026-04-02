@@ -1,0 +1,74 @@
+<%- include('partials/head', { title: 'Login' }) %>
+<div class="login-bg">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="brand-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      </div>
+      <span>LogAgg</span>
+    </div>
+
+    <div style="margin-bottom:24px;">
+      <div style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:4px;">Welcome back</div>
+      <div style="font-size:13px;color:var(--text2);">Sign in to your log aggregator</div>
+    </div>
+
+    <div id="login-error" class="login-error" style="display:none"></div>
+
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <input id="username" type="text" class="form-input" placeholder="admin" autocomplete="username" autofocus/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input id="password" type="password" class="form-input" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <div class="form-group" id="totp-group" style="display:none">
+      <label class="form-label">2FA Token</label>
+      <input id="totp" type="text" class="form-input font-mono" placeholder="000000" maxlength="6" autocomplete="one-time-code"/>
+    </div>
+
+    <button id="login-btn" class="btn btn-primary w-full" style="justify-content:center;height:40px;margin-top:4px;" onclick="doLogin()">
+      Sign In
+    </button>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);text-align:center;">
+      <span style="font-size:12px;color:var(--text3);">Default: admin / admin123</span>
+    </div>
+  </div>
+</div>
+<script>
+const errEl  = document.getElementById('login-error');
+const totpGr = document.getElementById('totp-group');
+let needTotp = false;
+
+document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+async function doLogin() {
+  const btn  = document.getElementById('login-btn');
+  const user = document.getElementById('username').value.trim();
+  const pass = document.getElementById('password').value;
+  const totp = document.getElementById('totp').value.trim();
+  if (!user || !pass) { showErr('Username and password are required'); return; }
+
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user, password: pass, token: totp || undefined }),
+      credentials: 'include'
+    });
+    const d = await r.json();
+    if (r.ok) { location.href = '/dashboard'; return; }
+    if (d.error && d.error.includes('2FA')) { needTotp = true; totpGr.style.display = ''; document.getElementById('totp').focus(); showErr(d.error); }
+    else showErr(d.error || 'Login failed');
+  } catch { showErr('Network error'); }
+  btn.disabled = false; btn.textContent = 'Sign In';
+}
+
+function showErr(msg) {
+  errEl.textContent = msg; errEl.style.display = '';
+  setTimeout(() => { errEl.style.display = 'none'; }, 5000);
+}
+</script>
+</body></html>

@@ -1,0 +1,151 @@
+<%- include('partials/head', { title: 'Logs' }) %>
+<div class="app-shell">
+  <%- include('partials/sidebar') %>
+  <div class="main-area">
+    <header class="top-header">
+      <div class="page-title">Logs</div>
+      <div class="header-actions">
+        <% if (selected.service && selected.date) { %>
+        <a href="/api/logs/download/<%= selected.service %>/<%= selected.date %><%= selected.level ? '?level='+selected.level : '' %><%= selected.q ? (selected.level?'&':'?')+'q='+selected.q : '' %>" class="btn btn-secondary btn-sm">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </a>
+        <% } %>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <!-- Filters -->
+      <div class="card" style="margin-bottom:12px;">
+        <form method="GET" action="/logs" id="search-form">
+          <div class="form-row" style="gap:10px;flex-wrap:wrap;">
+            <div class="form-group" style="min-width:160px;flex:1.5">
+              <label class="form-label">Service</label>
+              <select name="service" class="form-select" onchange="this.form.submit()">
+                <option value="">— All Services —</option>
+                <% services.forEach(function(s) { %>
+                <option value="<%= s.appName %>" <%= selected.service===s.appName?'selected':'' %>><%= s.appName %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:140px;">
+              <label class="form-label">Date</label>
+              <input type="date" name="date" class="form-input" value="<%= selected.date %>" max="<%= today %>" onchange="this.form.submit()"/>
+            </div>
+            <div class="form-group" style="min-width:120px;">
+              <label class="form-label">Level</label>
+              <select name="level" class="form-select">
+                <option value="">All Levels</option>
+                <option value="error" <%= selected.level==='error'?'selected':'' %>>Error</option>
+                <option value="warn"  <%= selected.level==='warn' ?'selected':'' %>>Warn</option>
+                <option value="info"  <%= selected.level==='info' ?'selected':'' %>>Info</option>
+                <option value="debug" <%= selected.level==='debug'?'selected':'' %>>Debug</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex:2;min-width:200px;">
+              <label class="form-label">Keyword Search</label>
+              <div class="search-wrap">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" name="q" class="form-input search-input" placeholder="Search logs…" value="<%= selected.q %>"/>
+              </div>
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end;gap:6px;min-width:auto;">
+              <button type="submit" class="btn btn-primary">Search</button>
+              <a href="/logs" class="btn btn-secondary">Reset</a>
+            </div>
+          </div>
+        </form>
+
+        <!-- Quick filter chips -->
+        <div class="chip-bar" style="margin-top:10px;margin-bottom:0;">
+          <span style="font-size:11px;color:var(--text3);line-height:28px;">Quick:</span>
+          <% ['error','warn','info','debug'].forEach(function(lvl) { %>
+          <a href="/logs?service=<%= selected.service %>&date=<%= selected.date %>&level=<%= lvl %>" class="chip <%= lvl %> <%= selected.level===lvl?'active':'' %>">
+            <%= lvl.charAt(0).toUpperCase()+lvl.slice(1) %>
+          </a>
+          <% }) %>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="card">
+        <% if (!selected.service) { %>
+          <div class="empty-state">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+            <p>Select a service to view logs</p>
+          </div>
+        <% } else if (!results || !results.lines || !results.lines.length) { %>
+          <div class="empty-state">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <p>No logs found for <strong><%= selected.service %></strong> on <strong><%= selected.date %></strong></p>
+          </div>
+        <% } else { %>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-size:12px;color:var(--text2);">
+              Showing <strong style="color:var(--text)"><%= results.lines.length %></strong> lines
+              from <strong style="color:var(--text)"><%= selected.service %></strong> · <span style="font-family:'JetBrains Mono',monospace"><%= selected.date %></span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);">
+              <label><input type="checkbox" id="wrap-toggle" onchange="toggleWrap(this)"/> Wrap text</label>
+            </div>
+          </div>
+
+          <div class="log-list" id="log-list">
+            <% results.lines.forEach(function(line, idx) { %>
+              <%
+                var parsed = null, level = 'info', ts = '', msg = '';
+                try {
+                  parsed = JSON.parse(line);
+                  level  = (parsed.level || 'info').toLowerCase();
+                  ts     = parsed.ts ? parsed.ts.replace('T',' ').slice(0,19) : '';
+                  msg    = parsed.message || parsed.msg || line;
+                } catch(e) {
+                  msg = line;
+                }
+                // filter in EJS if level/q set
+                var show = true;
+                if (selected.level && level !== selected.level) show = false;
+                if (selected.q && line.toLowerCase().indexOf(selected.q.toLowerCase()) === -1) show = false;
+              %>
+              <% if (show) { %>
+              <div class="log-line level-<%= level %>" onclick="toggleLine(this)">
+                <span class="log-ts"><%= ts %></span>
+                <span class="badge badge-<%= level %>"><%= level %></span>
+                <span class="log-body" style="<% if (!selected.q) { %>white-space:nowrap;overflow:hidden;text-overflow:ellipsis;<% } %>"><%= msg %></span>
+                <% if (parsed && parsed.appName) { %><span style="font-size:11px;color:var(--text3);white-space:nowrap;font-family:'JetBrains Mono',monospace"><%= parsed.appName %></span><% } %>
+              </div>
+              <div class="log-expanded" style="display:none">
+                <pre class="log-json"><%= parsed ? JSON.stringify(parsed, null, 2) : line %></pre>
+              </div>
+              <% } %>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleLine(el) {
+  const next = el.nextElementSibling;
+  if (!next) return;
+  const open = next.style.display === '';
+  next.style.display = open ? 'none' : '';
+  el.classList.toggle('expanded', !open);
+}
+function toggleWrap(cb) {
+  document.querySelectorAll('.log-body').forEach(el => {
+    el.style.whiteSpace = cb.checked ? 'pre-wrap' : 'nowrap';
+    el.style.overflow   = cb.checked ? 'visible'  : 'hidden';
+  });
+}
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+    e.preventDefault();
+    document.querySelector('[name="q"]').focus();
+  }
+});
+</script>
+</body></html>

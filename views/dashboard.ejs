@@ -1,0 +1,184 @@
+<%- include('partials/head', { title: 'Dashboard' }) %>
+<div class="app-shell">
+  <%- include('partials/sidebar') %>
+  <div class="main-area">
+    <header class="top-header">
+      <div class="page-title">Dashboard</div>
+      <div class="header-actions">
+        <span style="font-size:12px;color:var(--text3);">Today: <strong style="color:var(--text)"><%= today %></strong></span>
+        <button class="btn btn-secondary btn-sm" onclick="location.reload()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <% if (typeof renderError !== 'undefined' && renderError) { %>
+        <div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:12px 16px;color:#ff6b6b;margin-bottom:16px;">⚠ <%= renderError %></div>
+      <% } %>
+
+      <!-- Stat Cards -->
+      <% if (overview) { %>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon blue">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+          </div>
+          <div>
+            <div class="stat-value"><%= overview.logsToday.toLocaleString() %></div>
+            <div class="stat-label">Logs Today</div>
+            <div class="stat-sub"><%= overview.services %> service(s) active</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon red">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <div>
+            <div class="stat-value"><%= overview.errorsToday.toLocaleString() %></div>
+            <div class="stat-label">Errors Today</div>
+            <div class="stat-sub">Error rate: <%= overview.errorRate %>%</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div>
+            <div class="stat-value"><%= overview.services %></div>
+            <div class="stat-label">Services</div>
+            <div class="stat-sub"><%= overview.totalStorage %> total storage</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+          </div>
+          <div>
+            <div class="stat-value"><%= overview.errorRate %>%</div>
+            <div class="stat-label">Error Rate</div>
+            <div class="stat-sub">Last 24 hours</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:12px;">
+        <!-- Hourly chart -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Hourly Volume — Today
+          </div>
+          <div class="chart-wrap">
+            <canvas id="hourlyChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Top services -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
+            Top Services Today
+          </div>
+          <% if (overview.serviceList && overview.serviceList.length) { %>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <% overview.serviceList.slice(0,6).forEach(function(svc) { %>
+            <div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+                <span style="font-size:12px;font-weight:500;color:var(--text);font-family:'JetBrains Mono',monospace"><%= svc.appName %></span>
+                <span style="font-size:12px;color:var(--text2)"><%= svc.today %> logs</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill <%= svc.error > svc.today * 0.1 ? 'red' : '' %>" style="width:<%= overview.logsToday ? Math.round(svc.today/overview.logsToday*100) : 0 %>%"></div>
+              </div>
+            </div>
+            <% }) %>
+          </div>
+          <% } else { %>
+          <div class="empty-state" style="padding:24px 0;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+            <p>No logs ingested today</p>
+          </div>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Recent Errors -->
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Recent Errors
+          </span>
+          <a href="/logs?level=error&date=<%= today %>" class="btn btn-secondary btn-xs">View All</a>
+        </div>
+        <% if (errors && errors.length) { %>
+        <div class="log-list">
+          <% errors.forEach(function(e) { %>
+          <div class="log-line level-error" onclick="this.classList.toggle('expanded');this.nextElementSibling.style.display=this.classList.contains('expanded')?'':'none'">
+            <span class="log-ts"><%= e.ts ? e.ts.replace('T',' ').slice(0,19) : '' %></span>
+            <span class="badge badge-error" style="margin-top:1px;">error</span>
+            <span class="log-body truncate" style="color:var(--text)"><%= e.message || e._raw || JSON.stringify(e) %></span>
+            <span style="font-size:11px;color:var(--text3);white-space:nowrap"><%= e._appName || e.appName || '' %></span>
+          </div>
+          <div class="log-expanded" style="display:none">
+            <pre class="log-json"><%= JSON.stringify(e, null, 2) %></pre>
+          </div>
+          <% }) %>
+        </div>
+        <% } else { %>
+        <div class="empty-state" style="padding:24px 0;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+          <p>No errors today 🎉</p>
+        </div>
+        <% } %>
+      </div>
+      <% } else { %>
+      <div class="card">
+        <div class="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+          <p style="margin-top:12px;">No logs yet. Start ingesting logs using the API.</p>
+          <div style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surface2);padding:10px 14px;border-radius:6px;text-align:left;display:inline-block;color:var(--text2)">
+            curl -X POST http://localhost:9900/api/logs \<br>
+            &nbsp;&nbsp;-H "X-Api-Key: &lt;your-key&gt;" \<br>
+            &nbsp;&nbsp;-H "Content-Type: application/json" \<br>
+            &nbsp;&nbsp;-d '{"logs":["{\"level\":\"info\",\"appName\":\"myapp\",\"message\":\"hello\"}"]}'
+          </div>
+        </div>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const hourlyData = <%- JSON.stringify(hourly ? hourly.hours : []) %>;
+if (hourlyData.length && document.getElementById('hourlyChart')) {
+  const isDark = document.documentElement.dataset.theme !== 'light';
+  const gridColor = isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.06)';
+  const textColor = isDark ? '#5a5a78' : '#9494b8';
+  new Chart(document.getElementById('hourlyChart'), {
+    type: 'bar',
+    data: {
+      labels: hourlyData.map(h => h.hour + ':00'),
+      datasets: [
+        { label: 'info',  data: hourlyData.map(h => h.info),  backgroundColor: 'rgba(59,130,246,.5)',  stack: 's' },
+        { label: 'warn',  data: hourlyData.map(h => h.warn),  backgroundColor: 'rgba(245,158,11,.5)', stack: 's' },
+        { label: 'error', data: hourlyData.map(h => h.error), backgroundColor: 'rgba(239,68,68,.7)',  stack: 's' },
+        { label: 'debug', data: hourlyData.map(h => h.debug), backgroundColor: 'rgba(107,114,128,.4)',stack: 's' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { stacked: true, ticks: { color: textColor, font: { size: 10 }, maxTicksLimit: 12 }, grid: { color: gridColor } },
+        y: { stacked: true, ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor } }
+      }
+    }
+  });
+}
+</script>
+</body></html>
