@@ -7,14 +7,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script>
-(function(){
-  const theme = localStorage.getItem('theme');
-  if (theme === 'light') {
-    document.documentElement.classList.add('light');
-  }
-})();
-</script>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -49,6 +41,21 @@
       --header-h:   60px;
     }
 
+    /* Light mode overrides */
+    body.light {
+      --bg:         #f8fafc;
+      --bg2:        #ffffff;
+      --surface:    #ffffff;
+      --surface2:   #f1f5f9;
+      --border:     #e2e8f0;
+      --border2:    #cbd5e1;
+      --text:       #0f172a;
+      --text2:      #334155;
+      --text3:      #64748b;
+      --accent:     #2563eb;
+      --accent2:    #3b82f6;
+    }
+
     body {
       background: var(--bg);
       color: var(--text);
@@ -57,6 +64,7 @@
       line-height: 1.5;
       overflow: hidden;
       height: 100vh;
+      transition: background 0.2s, color 0.2s;
     }
 
     ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -354,7 +362,7 @@
         </div>
       </div>
       <div class="sidebar-actions">
-        <button class="btn btn-ghost btn-sm" onclick="toggleTheme()">🌓</button>
+        <button id="theme-toggle" class="btn btn-ghost btn-sm" onclick="toggleTheme()">🌓</button>
         <button class="btn btn-ghost btn-sm" style="flex:1" onclick="doLogout()">Sign out</button>
       </div>
     </div>
@@ -415,7 +423,7 @@
           <table class="data-table">
             <thead><tr><th>App</th><th>Days</th><th>Size</th><th>Usage</th></tr></thead>
             <tbody id="apps-tbody"><tr><td colspan="4"><div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">Loading…</div></div></td></tr></tbody>
-          </table>
+           </table>
         </div>
         <div class="chart-card">
           <div class="chart-header">
@@ -1076,49 +1084,41 @@ async function loadMetrics(){
   }catch{}
 }
 
-/* ── Theme Management ───────────────────────── */
-
+/* ── Theme Management (working) ───────────────────────── */
 const THEME_KEY = 'theme';
 
 function applyTheme(theme) {
-	document.documentElement.classList.toggle('light', theme === 'light'); // FIXED
+  // Toggle class on body (CSS defines body.light)
+  document.body.classList.toggle('light', theme === 'light');
 }
 
 function getPreferredTheme() {
-	// 1. user preference
-	const saved = localStorage.getItem(THEME_KEY);
-	if (saved) return saved;
-
-	// 2. system preference
-	return window.matchMedia('(prefers-color-scheme: light)').matches
-		? 'light'
-		: 'dark';
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved) return saved;
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 }
 
 function toggleTheme() {
-	const isLight = document.documentElement.classList.contains('light'); // FIXED
-	const newTheme = isLight ? 'dark' : 'light';
-
-	applyTheme(newTheme);
-	localStorage.setItem(THEME_KEY, newTheme);
-
-	updateThemeButton(newTheme);
+  const isLight = document.body.classList.contains('light');
+  const newTheme = isLight ? 'dark' : 'light';
+  applyTheme(newTheme);
+  localStorage.setItem(THEME_KEY, newTheme);
+  updateThemeButton(newTheme);
 }
 
 function updateThemeButton(theme) {
-	const btn = document.getElementById('theme-toggle');
-	if (!btn) return;
-
-	btn.textContent = theme === 'light' ? '🌞 Light' : '🌙 Dark';
+  const btn = document.getElementById('theme-toggle');
+  if (!btn) return;
+  btn.textContent = theme === 'light' ? '🌞 Light' : '🌙 Dark';
 }
 
-/* ── Init ───────────────────────── */
-
+// Initialize theme
 (function initTheme() {
-	const theme = getPreferredTheme();
-	applyTheme(theme);
-	updateThemeButton(theme);
+  const theme = getPreferredTheme();
+  applyTheme(theme);
+  updateThemeButton(theme);
 })();
+
 // ═══ Keyboard Shortcuts ══════════════════════════════════
 window.addEventListener('keydown',(e)=>{
   if(e.ctrlKey&&e.key==='l'){e.preventDefault();clearStream();}
