@@ -1,15 +1,13 @@
 'use strict';
-const express       = require('express');
-const router        = express.Router();
-const authenticate  = require('../middleware/auth');
+const express = require('express');
+const router = express.Router();
+const authenticate = require('../middleware/auth');
 const streamEmitter = require('../lib/emitter');
-const config        = require('../config');
+const config = require('../config');
 
 if (config.ENABLE_STREAM) {
-
 	// GET /logs/stream — real-time SSE
 	router.get('/', authenticate, (req, res) => {
-
 		/* ========================================================== */
 		/* ================= SSE HEADERS ================= */
 		/* ========================================================== */
@@ -24,8 +22,8 @@ if (config.ENABLE_STREAM) {
 		/* ================= CONNECT EVENT ================= */
 		/* ========================================================== */
 
-		res.write(`event: connected\n`);
-		res.write(`data: {"status":"connected"}\n\n`);
+		res.write('event: connected\n');
+		res.write('data: {"status":"connected"}\n\n');
 
 		/* ========================================================== */
 		/* ================= SEND LOG ================= */
@@ -49,7 +47,7 @@ if (config.ENABLE_STREAM) {
 				res.write(`data: ${safeLog}\n\n`);
 			} catch (err) {
 				// never crash stream
-				res.write(`data: {"error":"log_stream_error"}\n\n`);
+				res.write('data: {"error":"log_stream_error"}\n\n');
 			}
 		};
 
@@ -75,7 +73,7 @@ if (config.ENABLE_STREAM) {
 	});
 } else {
 	router.get('/', (_req, res) =>
-		res.status(404).json({ error: 'Stream endpoint is disabled' })
+		res.status(404).json({ error: 'Stream endpoint is disabled' }),
 	);
 }
 

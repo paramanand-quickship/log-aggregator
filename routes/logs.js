@@ -1,15 +1,16 @@
 'use strict';
-const express        = require('express');
-const router         = express.Router();
-const config         = require('../config');
+const express = require('express');
+const router = express.Router();
+const config = require('../config');
 const validateApiKey = require('../middleware/apiKey');
-const rateLimit      = require('../middleware/rateLimit');
-const streamEmitter  = require('../lib/emitter');
+const rateLimit = require('../middleware/rateLimit');
+const streamEmitter = require('../lib/emitter');
 const { getToday, sanitizeAppName } = require('../lib/utils');
-const logger         = require('../lib/logger');
+const logger = require('../lib/logger');
 
 let batchWriter;
-function setBatchWriter(bw) { batchWriter = bw; }
+
+function setBatchWriter (bw) { batchWriter = bw; }
 
 // Allow up to 1000 log batches/min per IP before throttling
 const ingestLimiter = rateLimit({ windowMs: 60_000, max: 1000, message: 'Ingest rate limit exceeded' });
