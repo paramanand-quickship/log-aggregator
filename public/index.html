@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Log Aggregator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #6c63ff;
+      --green: #4ade80;
+      --red: #f87171;
+      --yellow: #facc15;
+      --blue: #60a5fa;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --radius: 8px;
+      --font: 'Segoe UI', system-ui, sans-serif;
+      --mono: 'Cascadia Code', 'Fira Code', monospace;
+    }
+    body.light {
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --border: #d1d5db;
+      --text: #1f2937;
+      --muted: #6b7280;
+    }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); transition: background 0.2s; }
+
+    #auth-overlay {
+      position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 100;
+    }
+    #auth-overlay.hidden { display: none; }
+    .auth-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 40px; width: 100%; max-width: 420px;
+    }
+    .auth-card h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .auth-card p { color: var(--muted); margin-bottom: 28px; font-size: .9rem; }
+
+    #app { display: flex; height: 100vh; }
+    #sidebar {
+      width: 260px; background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; padding: 16px 0; flex-shrink: 0;
+    }
+    .sidebar-header { padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+    .sidebar-header h2 { font-size: 1rem; font-weight: 700; color: var(--accent); }
+    .sidebar-header small { color: var(--muted); font-size: .75rem; }
+
+    .nav-btn {
+      display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer;
+      font-size: .875rem; border: none; background: none; color: var(--text); width: 100%; text-align: left;
+      transition: background .15s;
+    }
+    .nav-btn:hover { background: rgba(108,99,255,.12); }
+    .nav-btn.active { background: rgba(108,99,255,.2); color: var(--accent); font-weight: 600; }
+    .nav-btn .icon { font-size: 1rem; width: 20px; text-align: center; }
+
+    .sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid var(--border); }
+    #status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 6px; }
+    #username-badge { font-size: .8rem; color: var(--muted); }
+
+    #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    .panel { display: none; flex: 1; flex-direction: column; overflow: hidden; padding: 24px; }
+    .panel.active { display: flex; }
+    .panel-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 20px; }
+
+    .form-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: flex-end; }
+    label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+    input, select, textarea {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: var(--radius); padding: 8px 12px; font-size: .875rem;
+      outline: none; width: 100%;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+    .field { min-width: 160px; }
+    .field-wide { flex: 1; min-width: 200px; }
+
+    .btn {
+      padding: 8px 18px; border-radius: var(--radius); border: none; cursor: pointer;
+      font-size: .875rem; font-weight: 600; transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px;
+    }
+    .card-title { font-size: .75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+    .card-value { font-size: 1.5rem; font-weight: 700; }
+
+    #log-output, #search-output, #stream-output {
+      flex: 1; background: #0a0c12; border: 1px solid var(--border); border-radius: var(--radius);
+      overflow-y: auto; padding: 12px 16px; font-family: var(--mono); font-size: .8rem;
+      line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+    }
+    .log-line { border-bottom: 1px solid rgba(255,255,255,.03); padding: 4px 0; }
+    .log-line:hover { background: rgba(255,255,255,.03); }
+    .log-info  { color: #a5f3c3; border-left: 3px solid var(--green); padding-left: 8px; }
+    .log-warn  { color: #fde047; border-left: 3px solid var(--yellow); padding-left: 8px; }
+    .log-error { color: #fca5a5; border-left: 3px solid var(--red); padding-left: 8px; }
+    .log-debug { color: #94a3b8; border-left: 3px solid var(--muted); padding-left: 8px; }
+    .log-fatal { color: #ff9999; border-left: 3px solid #ff4444; padding-left: 8px; font-weight: bold; }
+
+    .stream-bar {
+      display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      font-size: .8rem; color: var(--muted); flex-wrap: wrap;
+    }
+    #stream-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    #stream-dot.live { background: var(--green); animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    .filter-group { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+    .filter-group select, .filter-group input { width: auto; padding: 4px 8px; font-size: .75rem; }
+
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th { text-align: left; padding: 10px 12px; color: var(--muted); font-weight: 600; font-size: .75rem;
+         text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); }
+    td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: .875rem; opacity: 0; transform: translateY(10px);
+      transition: all .3s; pointer-events: none; max-width: 320px;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.ok  { border-color: var(--green); color: var(--green); }
+    #toast.err { border-color: var(--red);   color: var(--red);   }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="auth-overlay">
+  <div class="auth-card">
+    <h1>🔐 Log Aggregator</h1>
+    <p>Sign in to access your log dashboard</p>
+    <div id="login-form">
+      <div class="field" style="margin-bottom:14px"><label>Username</label><input id="login-user" type="text" placeholder="admin"></div>
+      <div class="field" style="margin-bottom:14px"><label>Password</label><input id="login-pass" type="password" placeholder="••••••••"></div>
+      <div class="field" id="totp-row" style="margin-bottom:20px;display:none"><label>2FA Code</label><input id="login-totp" type="text" placeholder="123456" maxlength="6"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Sign in</button>
+      <div id="login-err" style="margin-top:12px;color:var(--red);font-size:.85rem"></div>
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <nav id="sidebar">
+    <div class="sidebar-header"><h2>Log Aggregator</h2><small>v4.0</small></div>
+    <button class="nav-btn active" onclick="showPanel('dashboard')" data-panel="dashboard"><span class="icon">📊</span> Dashboard</button>
+    <button class="nav-btn" onclick="showPanel('stream')" data-panel="stream"><span class="icon">📡</span> Live Stream</button>
+    <button class="nav-btn" onclick="showPanel('viewer')" data-panel="viewer"><span class="icon">📄</span> Log Viewer</button>
+    <button class="nav-btn" onclick="showPanel('search')" data-panel="search"><span class="icon">🔍</span> Search</button>
+    <button class="nav-btn" onclick="showPanel('settings')" data-panel="settings"><span class="icon">⚙️</span> Settings</button>
+    <div class="sidebar-footer">
+      <div style="margin-bottom:8px"><span id="status-dot"></span><span style="font-size:.8rem">Connected</span></div>
+      <div id="username-badge">—</div>
+      <button class="btn btn-ghost" style="margin-top:10px;width:100%;padding:6px" onclick="doLogout()">Sign out</button>
+      <button class="btn btn-ghost" style="margin-top:6px;width:100%;padding:6px" onclick="toggleTheme()">🌓 Theme</button>
+    </div>
+  </nav>
+
+  <div id="main">
+    <!-- Dashboard -->
+    <div id="panel-dashboard" class="panel active">
+      <div class="panel-title">Dashboard</div>
+      <div class="card-grid">
+        <div class="card"><div class="card-title">Total Apps</div><div class="card-value" id="stat-apps">—</div></div>
+        <div class="card"><div class="card-title">Total Log Size</div><div class="card-value" id="stat-size">—</div></div>
+        <div class="card"><div class="card-title">Server Uptime</div><div class="card-value" id="stat-uptime">—</div></div>
+        <div class="card"><div class="card-title">Memory (heap)</div><div class="card-value" id="stat-mem">—</div></div>
+      </div>
+      <div class="panel-title" style="font-size:1rem">Log Volume (last 24h)</div>
+      <canvas id="volumeChart" style="height:200px; margin-bottom:20px"></canvas>
+      <div class="panel-title" style="font-size:1rem">Top Apps by Size</div>
+      <canvas id="topAppsChart" style="height:200px"></canvas>
+    </div>
+
+    <!-- Live Stream -->
+    <div id="panel-stream" class="panel" style="padding:0;gap:0">
+      <div class="stream-bar">
+        <div id="stream-dot"></div>
+        <span id="stream-status">Disconnected</span>
+        <span id="stream-count">0 events</span>
+        <div class="filter-group">
+          <select id="stream-app-filter"><option value="">All apps</option></select>
+          <select id="stream-level-filter"><option value="">All levels</option><option>INFO</option><option>WARN</option><option>ERROR</option><option>DEBUG</option><option>FATAL</option></select>
+          <input type="text" id="stream-msg-filter" placeholder="Message contains" style="width:120px">
+          <button class="btn btn-ghost" style="padding:4px 8px" onclick="clearStreamFilters()">Clear</button>
+        </div>
+        <button class="btn btn-primary" style="margin-left:8px;padding:4px 12px" onclick="toggleStream()">Connect</button>
+        <button class="btn btn-ghost" style="padding:4px 12px" onclick="clearStream()">Clear</button>
+        <label style="display:flex;align-items:center;gap:4px;font-size:.75rem"><input type="checkbox" id="stream-scroll-lock"> Scroll lock</label>
+      </div>
+      <pre id="stream-output"></pre>
+    </div>
+
+    <!-- Log Viewer (no delete button) -->
+    <div id="panel-viewer" class="panel">
+      <div class="panel-title">Log Viewer</div>
+      <div class="form-row">
+        <div class="field"><label>App</label><select id="viewer-app" onchange="loadDates()"><option>— select app —</option></select></div>
+        <div class="field"><label>Date</label><select id="viewer-date"><option>— select date —</option></select></div>
+        <div class="field"><label>Lines</label><input id="viewer-lines" type="number" value="200" min="1" max="10000" style="width:90px"></div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <button class="btn btn-primary" onclick="loadLogs()">Load</button>
+          <button class="btn btn-ghost" onclick="downloadLog()">⬇ Download</button>
+          <label style="display:flex;align-items:center;gap:4px;margin-bottom:0"><input type="checkbox" id="auto-refresh-checkbox"> Auto-refresh (5s)</label>
+        </div>
+      </div>
+      <div id="log-output"></div>
+    </div>
+
+    <!-- Search -->
+    <div id="panel-search" class="panel">
+      <div class="panel-title">Search Logs</div>
+      <div class="form-row">
+        <div class="field"><label>App</label><select id="search-app" onchange="loadSearchDates()"><option>— select app —</option></select></div>
+        <div class="field"><label>Date</label><select id="search-date"><option>— select date —</option></select></div>
+        <div class="field-wide"><label>Query (regex)</label><input id="search-query" type="text" placeholder="error|warn" onkeydown="if(event.key==='Enter')doSearch()"></div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:0"><input id="search-case" type="checkbox"> Case</label>
+          <button class="btn btn-primary" onclick="doSearch()">Search</button>
+        </div>
+      </div>
+      <div id="search-meta" style="font-size:.8rem;color:var(--muted);margin-bottom:12px"></div>
+      <div id="search-output"></div>
+    </div>
+
+    <!-- Settings (with 2FA and password change) -->
+    <div id="panel-settings" class="panel">
+      <div class="panel-title">Settings</div>
+      <div class="card-grid">
+        <!-- Change Password -->
+        <div class="card">
+          <div class="card-title">Change Password</div>
+          <input type="password" id="pw-current" placeholder="Current password" style="margin-bottom:8px">
+          <input type="password" id="pw-new" placeholder="New password (min 8 chars)" style="margin-bottom:8px">
+          <input type="password" id="pw-confirm" placeholder="Confirm new password" style="margin-bottom:12px">
+          <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
+        </div>
+
+        <!-- 2FA Management -->
+        <div class="card">
+          <div class="card-title">Two‑Factor Authentication</div>
+          <div style="margin-bottom:8px; font-size:.8rem">Status: <span id="totp-status-text">Checking...</span></div>
+          <div id="totp-qr-area" style="display:none; text-align:center; margin-bottom:12px">
+            <img id="totp-qr-img" style="max-width:150px; border-radius:8px">
+            <input type="text" id="totp-verify-input" placeholder="Enter 6-digit code" style="margin-top:8px">
+            <button class="btn btn-primary" style="margin-top:4px" onclick="verifyTotp()">Verify & Enable</button>
+          </div>
+          <div style="display:flex; gap:10px">
+            <button class="btn btn-primary" onclick="setupTotp()">Setup 2FA</button>
+            <button class="btn btn-danger" onclick="disableTotp()">Disable 2FA</button>
+          </div>
+        </div>
+
+        <!-- Log Retention -->
+        <div class="card">
+          <div class="card-title">Log Retention</div>
+          <input type="range" id="retention-slider" min="1" max="30" value="7">
+          <span id="retention-days">7 days</span>
+          <button class="btn btn-ghost" style="margin-top:8px" onclick="saveRetention()">Save</button>
+          <button class="btn btn-ghost" onclick="runCleanup()">Run Cleanup Now</button>
+        </div>
+
+        <!-- System Metrics -->
+        <div class="card">
+          <div class="card-title">System Metrics</div>
+          <pre id="metrics-preview" style="font-size:.7rem;max-height:150px;overflow-y:auto"></pre>
+          <button class="btn btn-ghost" onclick="loadMetrics()">Refresh</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+  // ---------- Utilities ----------
+  function toast(msg, type='ok'){ let t=document.getElementById('toast'); t.textContent=msg; t.className='show '+type; setTimeout(()=>t.className='',3000); }
+  async function api(method, path, body) {
+    const opts = { method, credentials: 'include', headers: {} };
+    if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    const r = await fetch(path, opts);
+    if (r.status === 401) { showAuthOverlay(); return null; }
+    return r;
+  }
+
+  // ---------- Auth ----------
+  function showAuthOverlay() { document.getElementById('auth-overlay').classList.remove('hidden'); document.getElementById('app').style.display = 'none'; }
+  let needsTotp = false;
+  async function doLogin() {
+    const username = document.getElementById('login-user').value.trim();
+    const password = document.getElementById('login-pass').value;
+    const token = document.getElementById('login-totp').value.trim();
+    const body = { username, password };
+    if (needsTotp && token) body.token = token;
+    const r = await fetch('/auth/login', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (r.status === 401 && d.error === '2FA token required') { needsTotp = true; document.getElementById('totp-row').style.display = ''; document.getElementById('login-err').textContent = 'Enter your 2FA code'; return; }
+    if (!r.ok) { document.getElementById('login-err').textContent = d.error || 'Login failed'; return; }
+    initApp(username);
+  }
+  async function doLogout() { await api('POST', '/auth/logout'); showAuthOverlay(); }
+  function initApp(username) {
+    document.getElementById('auth-overlay').classList.add('hidden');
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('username-badge').textContent = username;
+    loadDashboard(); populateAppSelects(); loadRetention(); loadMetrics(); load2FAStatus();
+  }
+
+  // ---------- Navigation ----------
+  function showPanel(name) {
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('panel-'+name).classList.add('active');
+    document.querySelector(`[data-panel="${name}"]`).classList.add('active');
+    if (name === 'dashboard') loadDashboard();
+  }
+
+  // ---------- Dashboard & Charts ----------
+  let volumeChart, topAppsChart;
+  async function loadDashboard() {
+    const [statsR, healthR] = await Promise.all([api('GET','/stats'), api('GET','/health')]);
+    if(!statsR||!healthR)return;
+    const stats=await statsR.json(), health=await healthR.json();
+    document.getElementById('stat-apps').textContent=stats.apps.length;
+    document.getElementById('stat-size').textContent=fmtBytes(stats.totalBytes);
+    document.getElementById('stat-uptime').textContent=fmtUptime(health.uptime);
+    document.getElementById('stat-mem').textContent=health.memory.heapUsed;
+    // volume chart
+    let vol = { labels: [], values: [] };
+    const volR = await api('GET','/stats/volume?hours=24');
+    if(volR && volR.ok) vol = await volR.json();
+    else { // fallback mock
+      for(let i=23;i>=0;i--) { let h=new Date(); h.setHours(h.getHours()-i); vol.labels.push(h.toLocaleTimeString()); vol.values.push(Math.floor(Math.random()*100)); }
+    }
+    if(volumeChart) volumeChart.destroy();
+    volumeChart=new Chart(document.getElementById('volumeChart'),{ type:'line', data:{ labels:vol.labels, datasets:[{ label:'Log count', data:vol.values, borderColor:'#6c63ff', fill:false }] } });
+    // top apps chart
+    if(topAppsChart) topAppsChart.destroy();
+    topAppsChart=new Chart(document.getElementById('topAppsChart'),{ type:'bar', data:{ labels:stats.apps.map(a=>a.appName), datasets:[{ label:'Size (MB)', data:stats.apps.map(a=>a.bytes/1024/1024), backgroundColor:'#4ade80' }] } });
+  }
+  function fmtBytes(b){ if(b<1024)return b+' B'; if(b<1024**2)return (b/1024).toFixed(1)+' KB'; if(b<1024**3)return (b/1024**2).toFixed(1)+' MB'; return (b/1024**3).toFixed(2)+' GB'; }
+  function fmtUptime(s){ let h=Math.floor(s/3600), m=Math.floor((s%3600)/60), ss=s%60; return `${h}h ${m}m ${ss}s`; }
+
+  // ---------- App selects ----------
+  let appData=[];
+  async function populateAppSelects() {
+    const r=await api('GET','/files/list');
+    if(!r)return;
+    appData=await r.json();
+    const opts='<option value="">— select app —</option>'+appData.map(a=>`<option value="${a.appName}">${a.appName}</option>`).join('');
+    document.getElementById('viewer-app').innerHTML=opts;
+    document.getElementById('search-app').innerHTML=opts;
+    const streamAppSel = document.getElementById('stream-app-filter');
+    streamAppSel.innerHTML = '<option value="">All apps</option>' + appData.map(a=>`<option value="${a.appName}">${a.appName}</option>`).join('');
+  }
+  function loadDates(){ const app=document.getElementById('viewer-app').value; const sel=document.getElementById('viewer-date'); sel.innerHTML='<option>— select date —</option>'; if(!app)return; const found=appData.find(a=>a.appName===app); if(found) found.dates.forEach(d=>sel.innerHTML+=`<option value="${d}">${d}</option>`); }
+  function loadSearchDates(){ const app=document.getElementById('search-app').value; const sel=document.getElementById('search-date'); sel.innerHTML='<option>— select date —</option>'; if(!app)return; const found=appData.find(a=>a.appName===app); if(found) found.dates.forEach(d=>sel.innerHTML+=`<option value="${d}">${d}</option>`); }
+
+  // ---------- Log Viewer ----------
+  let autoRefreshInterval=null;
+  async function loadLogs(){
+    const app=document.getElementById('viewer-app').value, date=document.getElementById('viewer-date').value, lines=document.getElementById('viewer-lines').value;
+    if(!app||!date){ toast('Select app and date','err'); return; }
+    const r=await api('GET',`/files/tail/${app}/${date}?lines=${lines}`);
+    if(!r)return;
+    const out=document.getElementById('log-output');
+    if(!r.ok){ out.textContent=(await r.json()).error; return; }
+    const data=await r.json();
+    out.innerHTML=data.lines.map(l=>`<div class="log-line">${escapeHtml(l)}</div>`).join('');
+    out.scrollTop=out.scrollHeight;
+  }
+  function downloadLog(){ const app=document.getElementById('viewer-app').value, date=document.getElementById('viewer-date').value; if(app&&date) window.open(`/files/download/${app}/${date}`,'_blank'); else toast('Select app and date','err'); }
+  function toggleAutoRefresh(){ const cb=document.getElementById('auto-refresh-checkbox'); if(cb.checked){ if(autoRefreshInterval) clearInterval(autoRefreshInterval); autoRefreshInterval=setInterval(()=>loadLogs(),5000); }else{ if(autoRefreshInterval) clearInterval(autoRefreshInterval); autoRefreshInterval=null; } }
+  document.getElementById('auto-refresh-checkbox').addEventListener('change',toggleAutoRefresh);
+
+  // ---------- Search ----------
+  async function doSearch(){
+    const app=document.getElementById('search-app').value, date=document.getElementById('search-date').value, q=document.getElementById('search-query').value, cs=document.getElementById('search-case').checked;
+    if(!app||!date||!q){ toast('Fill all fields','err'); return; }
+    const r=await api('GET',`/files/search/${app}/${date}?q=${encodeURIComponent(q)}&case=${cs}`);
+    if(!r)return;
+    const data=await r.json();
+    if(!r.ok){ toast(data.error,'err'); return; }
+    document.getElementById('search-meta').textContent=`${data.matches.length} matches for "${q}"`;
+    const re=new RegExp(q,cs?'g':'gi');
+    document.getElementById('search-output').innerHTML=data.matches.map(m=>`<div class="log-line">${escapeHtml(m).replace(re,s=>`<mark style="background:var(--yellow);color:black">${escapeHtml(s)}</mark>`)}</div>`).join('')||'<span style="color:var(--muted)">No matches.</span>';
+  }
+
+  // ---------- Live Stream ----------
+  let evtSource=null, streamCount=0, rawLogs=[];
+  function toggleStream(){
+    const btn=document.querySelector('[onclick="toggleStream()"]');
+    const dot=document.getElementById('stream-dot');
+    const statusSpan=document.getElementById('stream-status');
+    if(evtSource){ evtSource.close(); evtSource=null; dot.classList.remove('live'); statusSpan.textContent='Disconnected'; btn.textContent='Connect'; return; }
+    evtSource=new EventSource('/logs/stream');
+    evtSource.onopen=()=>{ dot.classList.add('live'); statusSpan.textContent='Live'; btn.textContent='Disconnect'; };
+    evtSource.onmessage=(e)=>{ if(!e.data||e.data===': ping')return; try{ const parsed=JSON.parse(e.data); streamCount++; document.getElementById('stream-count').textContent=`${streamCount} events`; rawLogs.push(parsed); applyStreamFilters(); if(!document.getElementById('stream-scroll-lock').checked){ const pre=document.getElementById('stream-output'); pre.scrollTop=pre.scrollHeight; } }catch(err){ console.warn(e.data); } };
+    evtSource.onerror=()=>{ dot.classList.remove('live'); statusSpan.textContent='Reconnecting...'; };
+  }
+  function applyStreamFilters(){
+    const levelFilter=document.getElementById('stream-level-filter').value;
+    const appFilter=document.getElementById('stream-app-filter').value;
+    const msgFilter=document.getElementById('stream-msg-filter').value.toLowerCase();
+    const filtered=rawLogs.filter(l=> (!levelFilter||l.level===levelFilter) && (!appFilter||(l.appName||'').toLowerCase()===appFilter.toLowerCase()) && (!msgFilter||JSON.stringify(l).toLowerCase().includes(msgFilter)) );
+    const container=document.getElementById('stream-output');
+    container.innerHTML=filtered.map(l=>`<div class="log-line ${getLevelClass(l.level)}">${escapeHtml(JSON.stringify(l,null,2))}</div>`).join('');
+  }
+  function getLevelClass(level){ switch((level||'').toUpperCase()){ case 'INFO':return 'log-info'; case 'WARN':return 'log-warn'; case 'ERROR':return 'log-error'; case 'DEBUG':return 'log-debug'; case 'FATAL':return 'log-fatal'; default:return ''; } }
+  function clearStreamFilters(){ document.getElementById('stream-level-filter').value=''; document.getElementById('stream-app-filter').value=''; document.getElementById('stream-msg-filter').value=''; applyStreamFilters(); }
+  function clearStream(){ rawLogs=[]; streamCount=0; document.getElementById('stream-output').innerHTML=''; document.getElementById('stream-count').textContent='0 events'; }
+  document.getElementById('stream-level-filter').addEventListener('change',applyStreamFilters);
+  document.getElementById('stream-app-filter').addEventListener('change',applyStreamFilters);
+  document.getElementById('stream-msg-filter').addEventListener('input',applyStreamFilters);
+
+  // ---------- Settings: 2FA & Password ----------
+  async function load2FAStatus() {
+    const r = await api('GET', '/auth/2fa/status');
+    if (r && r.ok) {
+      const data = await r.json();
+      document.getElementById('totp-status-text').innerText = data.enabled ? '✅ Enabled' : '❌ Disabled';
+    } else {
+      document.getElementById('totp-status-text').innerText = 'Unknown';
+    }
+  }
+  async function changePassword() {
+    const cur = document.getElementById('pw-current').value;
+    const nw = document.getElementById('pw-new').value;
+    const cf = document.getElementById('pw-confirm').value;
+    if (nw !== cf) { toast('Passwords do not match', 'err'); return; }
+    if (nw.length < 8) { toast('Password must be at least 8 characters', 'err'); return; }
+    const r = await api('POST', '/auth/change-password', { currentPassword: cur, newPassword: nw });
+    if (!r) return;
+    const d = await r.json();
+    if (!r.ok) { toast(d.error, 'err'); return; }
+    toast('Password updated successfully');
+    document.getElementById('pw-current').value = '';
+    document.getElementById('pw-new').value = '';
+    document.getElementById('pw-confirm').value = '';
+  }
+  async function setupTotp() {
+    const r = await api('GET', '/auth/2fa/setup');
+    if (!r) return;
+    const d = await r.json();
+    if (!r.ok) { toast(d.error, 'err'); return; }
+    document.getElementById('totp-qr-img').src = d.qr;
+    document.getElementById('totp-qr-area').style.display = '';
+    toast('Scan QR code, then enter the code to verify');
+  }
+  async function verifyTotp() {
+    const otp = document.getElementById('totp-verify-input').value.trim();
+    if (!otp) { toast('Enter the OTP code', 'err'); return; }
+    const r = await api('POST', '/auth/2fa/verify', { token: otp });
+    if (!r) return;
+    const d = await r.json();
+    if (!r.ok) { toast(d.error, 'err'); return; }
+    document.getElementById('totp-qr-area').style.display = 'none';
+    toast('2FA enabled successfully');
+    load2FAStatus();
+  }
+  async function disableTotp() {
+    if (!confirm('Disable 2FA? Your account will be less secure.')) return;
+    const r = await api('POST', '/auth/2fa/disable');
+    if (!r) return;
+    const d = await r.json();
+    if (!r.ok) { toast(d.error, 'err'); return; }
+    toast('2FA disabled');
+    document.getElementById('totp-qr-area').style.display = 'none';
+    load2FAStatus();
+  }
+
+  // ---------- Settings: Retention & Cleanup ----------
+  async function loadRetention(){ const r=await api('GET','/stats/retention'); if(r){ const data=await r.json(); document.getElementById('retention-slider').value=data.retentionDays; document.getElementById('retention-days').innerText=data.retentionDays+' days'; } }
+  async function saveRetention(){ const days=document.getElementById('retention-slider').value; const r=await api('PUT','/stats/retention',{days}); if(r.ok){ toast('Retention updated'); loadRetention(); }else toast('Failed','err'); }
+  async function runCleanup(){ const r=await api('POST','/stats/cleanup'); if(r.ok) toast('Cleanup started'); else toast('Failed','err'); }
+  async function loadMetrics(){ const r=await fetch('/stats/metrics'); if(r.ok){ const text=await r.text(); document.getElementById('metrics-preview').innerText=text.slice(0,1000); } }
+
+  // ---------- Theme ----------
+  function toggleTheme(){ document.body.classList.toggle('light'); localStorage.setItem('theme',document.body.classList.contains('light')?'light':'dark'); }
+  if(localStorage.getItem('theme')==='light') document.body.classList.add('light');
+
+  // ---------- Keyboard shortcuts ----------
+  window.addEventListener('keydown',(e)=>{
+    if(e.ctrlKey && e.key==='l'){ e.preventDefault(); clearStream(); }
+    if(e.ctrlKey && e.key==='f'){ e.preventDefault(); document.getElementById('stream-msg-filter').focus(); }
+    if(e.ctrlKey && e.key==='d'){ e.preventDefault(); downloadLog(); }
+    if(e.ctrlKey && e.key==='k'){ e.preventDefault(); document.getElementById('search-query').focus(); }
+  });
+
+  // ---------- Helpers ----------
+  function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  // Initial session check
+  (async()=>{ const r=await fetch('/auth/verify',{credentials:'include'}); if(r.ok){ const d=await r.json(); initApp(d.username); }else showAuthOverlay(); })();
+</script>
+</body>
+</html>

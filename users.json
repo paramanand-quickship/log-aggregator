@@ -1,0 +1,6 @@
+{
+  "admin": {
+    "password": "$2a$10$SYR5KVhLeBG0MgAWd4J5jecNm9Txc0DpYJusf4NMnplOQlA2afNGu",
+    "totpSecret": "JNIVMWTYIBRG4UZQIZIFARBVOIXHKXTI"
+  }
+}
