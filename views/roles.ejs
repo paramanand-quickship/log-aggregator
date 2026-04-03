@@ -1,0 +1,196 @@
+<%- include('partials/head', { title: 'Role Config' }) %>
+<style>
+  .rc-grid { display:grid; grid-template-columns: 1fr repeat(<%= roles.length %>, 120px); gap:0; }
+  .rc-head { padding:10px 14px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--text3); border-bottom:2px solid var(--border); }
+  .rc-head.role-col { text-align:center; }
+  .rc-row { display:contents; }
+  .rc-row:hover > .rc-cell { background:var(--surface2); }
+  .rc-cell { padding:9px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; font-size:12px; color:var(--text2); }
+  .rc-cell.center { justify-content:center; }
+  .rc-section-head { padding:12px 14px 6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--text3); border-bottom:1px solid var(--border); grid-column:1 / -1; background:var(--surface2); }
+  .rc-lock-badge { font-size:9px; background:rgba(245,158,11,.15); color:var(--yellow); border:1px solid rgba(245,158,11,.25); padding:1px 5px; border-radius:3px; margin-left:6px; font-weight:600; }
+
+  /* Toggle switch */
+  .rc-toggle { position:relative; width:36px; height:20px; }
+  .rc-toggle input { opacity:0; width:0; height:0; position:absolute; }
+  .rc-slider {
+    position:absolute; inset:0; background:var(--surface3); border-radius:20px;
+    border:1px solid var(--border2); cursor:pointer; transition:background .2s;
+  }
+  .rc-slider::before {
+    content:''; position:absolute; width:14px; height:14px; left:2px; bottom:2px;
+    background:var(--text3); border-radius:50%; transition:transform .2s, background .2s;
+  }
+  .rc-toggle input:checked + .rc-slider { background:var(--accent); border-color:var(--accent); }
+  .rc-toggle input:checked + .rc-slider::before { transform:translateX(16px); background:#fff; }
+  .rc-toggle input:disabled + .rc-slider { opacity:.5; cursor:not-allowed; }
+</style>
+
+<div class="app-shell">
+  <%- include('partials/sidebar') %>
+  <div class="main-area">
+
+    <header class="top-header">
+      <div class="page-title">Role Configuration</div>
+      <div class="header-actions">
+        <span style="font-size:12px;color:var(--text3);">Changes take effect on next page load</span>
+        <button class="btn btn-primary btn-sm" id="save-btn" onclick="saveAll()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+          Save Changes
+        </button>
+      </div>
+    </header>
+
+    <div class="page-content">
+
+      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <% roles.forEach(function(role) { %>
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">
+            <%= role[0].toUpperCase() %>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);text-transform:capitalize;"><%= role %></div>
+            <div style="font-size:11px;color:var(--text3);" id="summary-<%= role %>">–</div>
+          </div>
+        </div>
+        <% }) %>
+        <div style="padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:var(--radius-lg);display:flex;align-items:center;gap:8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span style="font-size:12px;color:var(--text2);">Locked items <span style="font-family:'JetBrains Mono',monospace;background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px;">🔒</span> cannot be removed — they are required for that role to function.</span>
+        </div>
+      </div>
+
+      <!-- ── Page Access ─────────────────────────────────────── -->
+      <div class="card" style="margin-bottom:12px;padding:0;overflow:hidden;">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+          <span style="font-size:13px;font-weight:600;color:var(--text2);">Page Access</span>
+        </div>
+
+        <div class="rc-grid" id="pages-grid">
+          <!-- header -->
+          <div class="rc-head">Page</div>
+          <% roles.forEach(function(role) { %>
+          <div class="rc-head role-col" style="text-transform:capitalize;"><%= role %></div>
+          <% }) %>
+
+          <% allPages.forEach(function(page) { %>
+          <div class="rc-row">
+            <div class="rc-cell">
+              <%= page.label %>
+              <% if (page.lockFor && page.lockFor.length) { %><span class="rc-lock-badge">🔒</span><% } %>
+            </div>
+            <% roles.forEach(function(role) { %>
+            <%
+              const isLocked  = page.lockFor && page.lockFor.includes(role);
+              const isChecked = (config[role] && config[role].pages && config[role].pages.includes(page.id)) || isLocked;
+            %>
+            <div class="rc-cell center">
+              <label class="rc-toggle">
+                <input type="checkbox"
+                  data-type="page" data-role="<%= role %>" data-id="<%= page.id %>"
+                  <%= isChecked ? 'checked' : '' %>
+                  <%= isLocked  ? 'disabled' : '' %>
+                  onchange="updateSummary('<%= role %>')"/>
+                <span class="rc-slider"></span>
+              </label>
+            </div>
+            <% }) %>
+          </div>
+          <% }) %>
+        </div>
+      </div>
+
+      <!-- ── Dashboard Cards ────────────────────────────────── -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+          <span style="font-size:13px;font-weight:600;color:var(--text2);">Dashboard Cards</span>
+          <span style="font-size:11px;color:var(--text3);">— controls what widgets are visible on the Dashboard for each role</span>
+        </div>
+
+        <div class="rc-grid" id="cards-grid">
+          <div class="rc-head">Card</div>
+          <% roles.forEach(function(role) { %>
+          <div class="rc-head role-col" style="text-transform:capitalize;"><%= role %></div>
+          <% }) %>
+
+          <%
+            const sections = [...new Set(allCards.map(c => c.section))];
+          %>
+          <% sections.forEach(function(section) { %>
+            <div class="rc-section-head"><%= section %></div>
+            <% allCards.filter(c => c.section === section).forEach(function(card) { %>
+            <div class="rc-row">
+              <div class="rc-cell"><%= card.label %></div>
+              <% roles.forEach(function(role) { %>
+              <%
+                const isCardOn = config[role] && config[role].cards && config[role].cards.includes(card.id);
+              %>
+              <div class="rc-cell center">
+                <label class="rc-toggle">
+                  <input type="checkbox"
+                    data-type="card" data-role="<%= role %>" data-id="<%= card.id %>"
+                    <%= isCardOn ? 'checked' : '' %>
+                    onchange="updateSummary('<%= role %>')"/>
+                  <span class="rc-slider"></span>
+                </label>
+              </div>
+              <% }) %>
+            </div>
+            <% }) %>
+          <% }) %>
+        </div>
+      </div>
+
+    </div><!-- /page-content -->
+  </div>
+</div>
+
+<script>
+const ROLES = <%- JSON.stringify(roles) %>;
+
+function getToggles(type, role) {
+  return [...document.querySelectorAll(`input[data-type="${type}"][data-role="${role}"]`)];
+}
+
+function updateSummary(role) {
+  const pages = getToggles('page', role).filter(t => t.checked).length;
+  const cards = getToggles('card', role).filter(t => t.checked).length;
+  const el    = document.getElementById('summary-' + role);
+  if (el) el.textContent = `${pages} pages · ${cards} cards`;
+}
+
+async function saveAll() {
+  const payload = {};
+  ROLES.forEach(role => {
+    payload[role] = {
+      pages: getToggles('page', role).filter(t => t.checked).map(t => t.dataset.id),
+      cards: getToggles('card', role).filter(t => t.checked).map(t => t.dataset.id),
+    };
+  });
+
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const r = await fetch('/api/role-config', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast('Role config saved — changes apply on next page load', 'success');
+  } catch (e) { toast(e.message, 'error'); }
+  finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg> Save Changes';
+  }
+}
+
+// Init summaries
+ROLES.forEach(updateSummary);
+</script>
+</body></html>

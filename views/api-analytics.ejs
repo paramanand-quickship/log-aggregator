@@ -1,0 +1,484 @@
+<%- include('partials/head', { title: 'API Analytics' }) %>
+<style>
+  /* ── page-specific ── */
+  .method-badge {
+    display:inline-flex;align-items:center;padding:1px 7px;border-radius:4px;
+    font-size:10px;font-weight:700;letter-spacing:.5px;font-family:'JetBrains Mono',monospace;
+    white-space:nowrap;
+  }
+  .method-GET    { background:rgba(34,197,94,.15);  color:var(--green); }
+  .method-POST   { background:rgba(59,130,246,.15); color:var(--blue); }
+  .method-PUT    { background:rgba(245,158,11,.15); color:var(--yellow); }
+  .method-DELETE { background:rgba(239,68,68,.15);  color:var(--red); }
+  .method-PATCH  { background:rgba(99,102,241,.15); color:var(--accent-l); }
+
+  .dur-pill {
+    display:inline-block;padding:2px 8px;border-radius:4px;
+    font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:600;
+  }
+  .dur-ok   { background:rgba(34,197,94,.12);  color:var(--green); }
+  .dur-med  { background:rgba(245,158,11,.12); color:var(--yellow); }
+  .dur-slow { background:rgba(239,68,68,.12);  color:var(--red); }
+
+  .status-2xx { color:var(--green); }
+  .status-4xx { color:var(--yellow); }
+  .status-5xx { color:var(--red); }
+
+  .sort-btn { background:none;border:none;color:var(--text3);cursor:pointer;padding:0 4px;font-size:11px; }
+  .sort-btn.asc::after  { content:' ↑'; }
+  .sort-btn.desc::after { content:' ↓'; }
+
+  .empty-api { text-align:center;padding:40px 20px;color:var(--text3); }
+
+  .top-bar-item { display:flex;flex-direction:column;gap:2px; }
+  .top-bar-label { font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px; }
+  .top-bar-val   { font-size:13px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace; }
+</style>
+
+<div class="app-shell">
+  <%- include('partials/sidebar') %>
+  <div class="main-area">
+
+    <header class="top-header">
+      <div class="page-title">API Analytics</div>
+      <div class="header-actions" style="gap:10px;">
+        <select id="svc-select" class="form-select" style="max-width:200px;" onchange="loadAll()">
+          <% if (services && services.length) { %>
+            <% services.forEach(function(s){ %>
+            <option value="<%= s.appName %>" <%= (selected.service === s.appName) ? 'selected' : '' %>>
+              <%= s.baseApp %>
+            </option>
+            <% }) %>
+          <% } else { %>
+            <option value="">No services yet</option>
+          <% } %>
+        </select>
+        <input type="date" id="date-pick" class="form-input" style="max-width:140px;"
+          value="<%= selected.date %>" max="<%= today %>" onchange="loadAll()"/>
+        <button class="btn btn-secondary btn-sm" onclick="loadAll()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    <div class="page-content">
+
+      <!-- No services state -->
+      <% if (!services || !services.length) { %>
+      <div class="card">
+        <div class="empty-api">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;opacity:.4"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px;">No API request data yet</div>
+          <div style="font-size:12px;max-width:440px;margin:0 auto;line-height:1.7;">
+            Add <code style="background:var(--surface3);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;">Logger.requestLogger()</code>
+            middleware to your Express app — it will start shipping request metrics here automatically.
+          </div>
+          <pre style="margin:16px auto 0;max-width:440px;text-align:left;font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surface3);padding:12px;border-radius:8px;color:var(--text2);line-height:1.8;border:1px solid var(--border);">const Logger = require('./Utils/Logger');
+
+// In app.js, BEFORE your routes:
+app.use(Logger.requestLogger());</pre>
+        </div>
+      </div>
+      <% } else { %>
+
+      <!-- ── Stat Cards ──────────────────────────────────────────── -->
+      <div class="stats-grid" id="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(165px,1fr));margin-bottom:16px;">
+        <div class="stat-card">
+          <div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg></div>
+          <div><div class="stat-value" id="sc-total">–</div><div class="stat-label">Total Requests</div><div class="stat-sub" id="sc-total-sub">today</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg></div>
+          <div><div class="stat-value" id="sc-avg">–</div><div class="stat-label">Avg Response</div><div class="stat-sub" id="sc-max-sub">–</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon red"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+          <div><div class="stat-value" id="sc-err">–</div><div class="stat-label">Error Rate</div><div class="stat-sub" id="sc-err-sub">–</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
+          <div><div class="stat-value" id="sc-data">–</div><div class="stat-label">Data Transferred</div><div class="stat-sub" id="sc-data-sub">req + res</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon yellow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13,2 13,9 20,9"/></svg></div>
+          <div><div class="stat-value" id="sc-max">–</div><div class="stat-label">Slowest Request</div><div class="stat-sub">max duration</div></div>
+        </div>
+      </div>
+
+      <!-- ── Row 2: Hourly chart + Status doughnut ──────────────── -->
+      <div class="grid-2" style="margin-bottom:12px;">
+
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Hourly Request Volume
+          </div>
+          <div class="chart-wrap"><canvas id="hourly-chart"></canvas></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            Status Code Distribution
+          </div>
+          <div style="display:flex;align-items:center;gap:20px;">
+            <div style="width:140px;height:140px;flex-shrink:0;"><canvas id="status-chart"></canvas></div>
+            <div id="status-legend" style="display:flex;flex-direction:column;gap:8px;flex:1;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Row 3: Avg response time per endpoint ──────────────── -->
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+          Top 10 Slowest Endpoints — Avg Response Time
+        </div>
+        <div style="height:220px;"><canvas id="slowest-chart"></canvas></div>
+      </div>
+
+      <!-- ── Row 4: Full endpoint table ────────────────────────── -->
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title" style="justify-content:space-between;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            All Endpoints
+          </span>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <div class="search-wrap" style="width:200px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="ep-search" class="form-input search-input" placeholder="Filter endpoints…" oninput="filterTable()"/>
+            </div>
+            <button class="btn btn-secondary btn-xs" onclick="downloadCsv()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              CSV
+            </button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="ep-table">
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Endpoint <button class="sort-btn" data-col="path" onclick="sortTable(this)">↕</button></th>
+                <th>Calls <button class="sort-btn" data-col="count" onclick="sortTable(this)">↕</button></th>
+                <th>Avg <button class="sort-btn" data-col="avgDuration" onclick="sortTable(this)">↕</button></th>
+                <th>P95</th>
+                <th>Max</th>
+                <th>Avg Res</th>
+                <th>Errors <button class="sort-btn" data-col="errors" onclick="sortTable(this)">↕</button></th>
+                <th>Err %</th>
+              </tr>
+            </thead>
+            <tbody id="ep-tbody">
+              <tr><td colspan="9" style="text-align:center;color:var(--text3);padding:24px;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Row 5: Error hot-spots ─────────────────────────────── -->
+      <div class="card">
+        <div class="card-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Error Hot-spots
+          <span id="error-count-badge" class="badge" style="margin-left:4px;"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Endpoint</th>
+                <th>Total Errors</th>
+                <th>5xx</th>
+                <th>Error Rate</th>
+                <th>Status Codes</th>
+                <th>Last Seen</th>
+              </tr>
+            </thead>
+            <tbody id="err-tbody">
+              <tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <% } %>
+    </div><!-- /page-content -->
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const isDark = () => document.documentElement.dataset.theme !== 'light';
+const gc = (a) => isDark() ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`;
+const gridColor = () => isDark() ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.06)';
+const textColor = () => isDark() ? '#5a5a78' : '#9494b8';
+
+let _endpoints  = [];
+let _sortCol    = 'count';
+let _sortDir    = 'desc';
+let _hourlyChrt = null;
+let _statusChrt = null;
+let _slowChrt   = null;
+
+function fmtMs(ms) {
+  if (ms == null) return '–';
+  if (ms < 1)    return '<1ms';
+  if (ms >= 1000) return (ms/1000).toFixed(2)+'s';
+  return ms+'ms';
+}
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  const k=1024,s=['B','KB','MB','GB'];
+  const i=Math.floor(Math.log(b)/Math.log(k));
+  return (b/Math.pow(k,i)).toFixed(1)+' '+s[i];
+}
+function durClass(ms) {
+  if (ms < 200)  return 'dur-ok';
+  if (ms < 800)  return 'dur-med';
+  return 'dur-slow';
+}
+function errClass(rate) {
+  return parseFloat(rate) > 5 ? 'color:var(--red)' : parseFloat(rate) > 1 ? 'color:var(--yellow)' : 'color:var(--text2)';
+}
+
+// ── API helpers ──────────────────────────────────────────────
+async function api(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+function getParams() {
+  const svc  = document.getElementById('svc-select')?.value;
+  const date = document.getElementById('date-pick')?.value;
+  return { svc, date };
+}
+
+// ── Load all panels ──────────────────────────────────────────
+async function loadAll() {
+  const { svc, date } = getParams();
+  if (!svc) return;
+  await Promise.all([
+    loadOverview(svc, date),
+    loadHourly(svc, date),
+    loadStatus(svc, date),
+    loadEndpoints(svc, date),
+    loadErrors(svc, date),
+    loadSlowest(svc, date),
+  ]);
+}
+
+// ── Overview cards ───────────────────────────────────────────
+async function loadOverview(svc, date) {
+  try {
+    const d = await api(`/api/api-analytics/overview?service=${encodeURIComponent(svc)}&date=${date}`);
+    set('sc-total',    d.totalRequests.toLocaleString());
+    set('sc-total-sub', date);
+    set('sc-avg',      fmtMs(d.avgDuration));
+    set('sc-max-sub',  `max: ${fmtMs(d.maxDuration)}`);
+    const errEl = document.getElementById('sc-err');
+    errEl.textContent = d.errorRate + '%';
+    errEl.style.color = parseFloat(d.errorRate) > 5 ? 'var(--red)' : parseFloat(d.errorRate) > 1 ? 'var(--yellow)' : 'var(--green)';
+    set('sc-err-sub',  `${d.totalErrors} total (${d.totalErrors5xx} 5xx)`);
+    set('sc-data',     d.totalDataHuman);
+    set('sc-data-sub', `↑ ${d.totalReqHuman}  ↓ ${d.totalResHuman}`);
+    set('sc-max',      fmtMs(d.maxDuration));
+  } catch {}
+}
+
+// ── Hourly chart ─────────────────────────────────────────────
+async function loadHourly(svc, date) {
+  try {
+    const d = await api(`/api/api-analytics/hourly?service=${encodeURIComponent(svc)}&date=${date}`);
+    const h  = d.hours;
+    const labels = h.map(x => x.hour + ':00');
+    if (_hourlyChrt) _hourlyChrt.destroy();
+    _hourlyChrt = new Chart(document.getElementById('hourly-chart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label:'2xx',  data: h.map(x=>x.ok),   backgroundColor:'rgba(34,197,94,.55)',  stack:'s' },
+          { label:'4xx',  data: h.map(x=>x.warn),  backgroundColor:'rgba(245,158,11,.55)', stack:'s' },
+          { label:'5xx',  data: h.map(x=>x.error), backgroundColor:'rgba(239,68,68,.75)',  stack:'s' },
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ labels:{ color:textColor(), font:{ size:11 } } } },
+        scales:{
+          x:{ stacked:true, ticks:{ color:textColor(),font:{size:10},maxTicksLimit:12 }, grid:{color:gridColor()} },
+          y:{ stacked:true, ticks:{ color:textColor(),font:{size:10} }, grid:{color:gridColor()} }
+        }
+      }
+    });
+  } catch {}
+}
+
+// ── Status doughnut ──────────────────────────────────────────
+async function loadStatus(svc, date) {
+  try {
+    const d = await api(`/api/api-analytics/status?service=${encodeURIComponent(svc)}&date=${date}`);
+    const dist = d.distribution;
+    const labels = Object.keys(dist).map(k => k+'xx');
+    const vals   = Object.values(dist);
+    const colors = {
+      '2xx':'rgba(34,197,94,.8)', '3xx':'rgba(59,130,246,.8)',
+      '4xx':'rgba(245,158,11,.8)','5xx':'rgba(239,68,68,.8)',
+    };
+    const bgColors = labels.map(l => colors[l] || 'rgba(107,114,128,.5)');
+
+    if (_statusChrt) _statusChrt.destroy();
+    _statusChrt = new Chart(document.getElementById('status-chart'), {
+      type: 'doughnut',
+      data: { labels, datasets:[{ data:vals, backgroundColor:bgColors, borderColor:'transparent', borderWidth:0 }] },
+      options: {
+        responsive:true, maintainAspectRatio:false, cutout:'70%',
+        plugins:{ legend:{ display:false } }
+      }
+    });
+
+    const leg = document.getElementById('status-legend');
+    leg.innerHTML = labels.map((l,i) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="width:10px;height:10px;border-radius:2px;background:${bgColors[i]};flex-shrink:0;"></div>
+          <span style="font-size:12px;color:var(--text2);">${l}</span>
+        </div>
+        <span style="font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--text);">${vals[i].toLocaleString()}</span>
+      </div>`).join('');
+  } catch {}
+}
+
+// ── Slowest bar chart ────────────────────────────────────────
+async function loadSlowest(svc, date) {
+  try {
+    const data = await api(`/api/api-analytics/slowest?service=${encodeURIComponent(svc)}&date=${date}&top=10`);
+    if (!data.length) return;
+    const labels = data.map(e => `${e.method} ${e.path.length > 30 ? '…'+e.path.slice(-28) : e.path}`);
+    const avgs   = data.map(e => e.avgDuration);
+    const p95s   = data.map(e => e.p95Duration);
+    if (_slowChrt) _slowChrt.destroy();
+    _slowChrt = new Chart(document.getElementById('slowest-chart'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label:'Avg (ms)', data:avgs, backgroundColor:'rgba(99,102,241,.65)', borderRadius:3 },
+          { label:'P95 (ms)', data:p95s, backgroundColor:'rgba(245,158,11,.5)',  borderRadius:3 },
+        ]
+      },
+      options: {
+        indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ labels:{ color:textColor(),font:{size:11} } } },
+        scales:{
+          x:{ ticks:{ color:textColor(),font:{size:10},callback:v=>v+'ms' }, grid:{color:gridColor()} },
+          y:{ ticks:{ color:textColor(),font:{size:10},font:{family:"'JetBrains Mono',monospace"} }, grid:{display:false} }
+        }
+      }
+    });
+  } catch {}
+}
+
+// ── Endpoint table ───────────────────────────────────────────
+async function loadEndpoints(svc, date) {
+  try {
+    _endpoints = await api(`/api/api-analytics/endpoints?service=${encodeURIComponent(svc)}&date=${date}`);
+    renderTable();
+  } catch { document.getElementById('ep-tbody').innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--red);padding:16px;">Failed to load</td></tr>'; }
+}
+
+function renderTable() {
+  const q   = (document.getElementById('ep-search')?.value || '').toLowerCase();
+  let rows  = _endpoints.filter(e => !q || (e.method+' '+e.path).toLowerCase().includes(q));
+
+  // sort
+  rows.sort((a,b) => {
+    const av = a[_sortCol], bv = b[_sortCol];
+    if (typeof av === 'string') return _sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return _sortDir === 'asc' ? av - bv : bv - av;
+  });
+
+  document.getElementById('ep-tbody').innerHTML = rows.length
+    ? rows.map(e => `
+      <tr>
+        <td><span class="method-badge method-${e.method}">${e.method}</span></td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;max-width:260px;" class="truncate">${esc(e.path)}</td>
+        <td style="font-weight:600;color:var(--text);">${e.count.toLocaleString()}</td>
+        <td><span class="dur-pill ${durClass(e.avgDuration)}">${fmtMs(e.avgDuration)}</span></td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text2);">${fmtMs(e.p95Duration)}</td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text2);">${fmtMs(e.maxDuration)}</td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text3);">${fmtBytes(e.avgResBytes)}</td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:${e.errors > 0 ? 'var(--red)' : 'var(--text3)'};">${e.errors}</td>
+        <td style="font-size:12px;${errClass(e.errorRate)}">${e.errorRate}%</td>
+      </tr>`).join('')
+    : '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:24px;">No endpoints found</td></tr>';
+}
+
+function filterTable() { renderTable(); }
+
+function sortTable(btn) {
+  const col = btn.dataset.col;
+  document.querySelectorAll('.sort-btn').forEach(b => b.className = 'sort-btn');
+  if (_sortCol === col) {
+    _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _sortCol = col; _sortDir = 'desc';
+  }
+  btn.className = `sort-btn ${_sortDir}`;
+  renderTable();
+}
+
+// ── Error table ──────────────────────────────────────────────
+async function loadErrors(svc, date) {
+  try {
+    const data = await api(`/api/api-analytics/errors?service=${encodeURIComponent(svc)}&date=${date}&top=20`);
+    const badge = document.getElementById('error-count-badge');
+    if (badge) {
+      badge.textContent = data.length ? data.reduce((a,e)=>a+e.errors,0)+' errors' : '';
+      badge.className = `badge ${data.length ? 'badge-error' : ''}`;
+    }
+    document.getElementById('err-tbody').innerHTML = data.length
+      ? data.map(e => {
+          const codes = Object.entries(e.statusCodes)
+            .map(([sc, cnt]) => `<span class="badge badge-${sc>=500?'error':sc>=400?'warn':'info'}" style="font-size:9px;">${sc}×${cnt}</span>`)
+            .join(' ');
+          const ago = e.lastSeen ? new Date(e.lastSeen).toLocaleTimeString() : '–';
+          return `<tr>
+            <td><span class="method-badge method-${e.method}">${e.method}</span></td>
+            <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;max-width:240px;" class="truncate">${esc(e.path)}</td>
+            <td style="font-weight:700;color:var(--red);">${e.errors}</td>
+            <td style="color:${e.errors5xx > 0 ? 'var(--red)' : 'var(--text3)'};">${e.errors5xx}</td>
+            <td style="font-weight:600;${errClass(e.errorRate)}">${e.errorRate}%</td>
+            <td>${codes}</td>
+            <td style="font-size:11px;color:var(--text3);">${ago}</td>
+          </tr>`;
+        }).join('')
+      : '<tr><td colspan="7" style="text-align:center;color:var(--green);padding:24px;">No errors — all endpoints are healthy 🎉</td></tr>';
+  } catch {}
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+function set(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function downloadCsv() {
+  const headers = ['Method','Path','Calls','Avg(ms)','P95(ms)','Max(ms)','AvgResBytes','Errors','ErrorRate%'];
+  const rows = _endpoints.map(e => [e.method,e.path,e.count,e.avgDuration,e.p95Duration,e.maxDuration,e.avgResBytes,e.errors,e.errorRate]);
+  const csv  = [headers, ...rows].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a    = document.createElement('a');
+  a.href     = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = `api-analytics-${getParams().date}.csv`;
+  a.click();
+}
+
+// ── Init ─────────────────────────────────────────────────────
+<% if (services && services.length) { %>
+loadAll();
+<% } %>
+</script>
+</body></html>
