@@ -11,16 +11,16 @@ const svc = new RoleConfigService();
  *   router.get('/analytics', authenticateUI, requirePage('analytics'), ...)
  */
 function requirePage (pageId) {
-  return async function pageAccessMiddleware (req, res, next) {
-    if (!req.user) return res.redirect('/login');
-    try {
-      const allowed = await svc.canAccessPage(req.user.role, pageId);
-      if (!allowed) return res.redirect('/dashboard?denied=1');
-      next();
-    } catch {
-      next(); // config read error → allow (fail open)
-    }
-  };
+	return async function pageAccessMiddleware (req, res, next) {
+		if (!req.user) { return res.redirect('/login'); }
+		try {
+			const allowed = await svc.canAccessPage(req.user.role, pageId);
+			if (!allowed) { return res.redirect('/dashboard?denied=1'); }
+			next();
+		} catch {
+			next(); // config read error → allow (fail open)
+		}
+	};
 }
 
 module.exports = { requirePage };
