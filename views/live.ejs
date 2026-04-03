@@ -1,68 +1,58 @@
 <%- include('partials/head', { title: 'Live Stream' }) %>
 <style>
+  .main-area { overflow: hidden; }
   .live-toolbar {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 14px; background: var(--surface); border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
   .conn-indicator { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
   #stream-box {
-    flex: 1; overflow-y: auto; padding: 8px 4px;
+    flex: 1; overflow-y: auto; padding: 6px 2px;
     font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    background: var(--bg);
   }
   .stream-line {
     display: flex; align-items: flex-start; gap: 8px;
-    padding: 4px 10px; border-radius: 4px; cursor: pointer; transition: background .1s;
-    border-left: 3px solid transparent;
+    padding: 4px 12px; cursor: pointer; transition: background .1s;
+    border-left: 3px solid transparent; user-select: none;
   }
   .stream-line:hover { background: var(--surface2); }
+  .stream-line.expanded { background: var(--surface2); }
   .stream-line.level-error { border-left-color: var(--red);    background: rgba(239,68,68,.04); }
-  .stream-line.level-warn  { border-left-color: var(--yellow); background: rgba(245,158,11,.04);}
+  .stream-line.level-warn  { border-left-color: var(--yellow); background: rgba(245,158,11,.04); }
   .stream-line.level-info  { border-left-color: var(--blue); }
-  .stream-line.level-debug { border-left-color: var(--gray); opacity:.7; }
-  .stream-ts  { color: var(--text3); white-space: nowrap; font-size: 11px; padding-top:1px; min-width:160px; }
-  .stream-app {
-    color: var(--accent-l);
-    white-space: nowrap;
-    font-size: 11px;
-    width: 100px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
-  }
-  .stream-service {
-    color: var(--text2);
-    white-space: nowrap;
-    font-size: 11px;
-    width: 100px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
-  }
-  .stream-msg { flex:1; word-break:break-all; color:var(--text); }
-  .stream-exp { display:none; padding: 6px 10px 8px; background:var(--surface3); border-radius:4px; margin:0 10px 4px; }
-  .stream-exp pre { font-size:11px; white-space:pre-wrap; word-break:break-all; color:var(--text); margin:0; }
-  #count-badge { background: var(--accent-dim); color: var(--accent-l); padding: 2px 10px; border-radius:10px; font-size:11px; font-weight:600; }
-  #err-badge   { background: rgba(239,68,68,.15); color:var(--red); padding:2px 10px; border-radius:10px; font-size:11px; font-weight:600; }
-  .toolbar-checkbox {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    background: var(--surface2);
-    padding: 4px 10px;
-    border-radius: 20px;
-    cursor: pointer;
-  }
-  .toolbar-checkbox input {
-    margin: 0;
-    cursor: pointer;
-  }
+  .stream-line.level-debug { border-left-color: var(--gray); opacity: .7; }
+  .stream-line.level-error:hover,.stream-line.level-error.expanded { background: rgba(239,68,68,.08); }
+  .stream-line.level-warn:hover,.stream-line.level-warn.expanded   { background: rgba(245,158,11,.08); }
+  .stream-ts  { color: var(--text3); white-space: nowrap; font-size: 11px; padding-top: 2px; min-width: 150px; }
+  .stream-app { color: var(--accent-l); white-space: nowrap; font-size: 11px; width: 100px; overflow: hidden; text-overflow: ellipsis; display: inline-block; padding-top: 2px; }
+  .stream-svc { color: var(--text2); white-space: nowrap; font-size: 11px; width: 90px; overflow: hidden; text-overflow: ellipsis; display: inline-block; padding-top: 2px; }
+  .stream-msg { flex: 1; word-break: break-all; color: var(--text); padding-top: 1px; line-height: 1.5; }
+  .expand-arrow { color: var(--text3); font-size: 9px; padding-top: 4px; transition: transform .15s; flex-shrink: 0; }
+  .stream-line.expanded .expand-arrow { transform: rotate(180deg); }
+  .stream-exp { display: none; padding: 8px 14px 10px 30px; background: var(--surface2); border-left: 3px solid var(--border2); margin-bottom: 1px; }
+  .stream-exp strong { font-size: 10px; color: var(--text3); letter-spacing: .5px; text-transform: uppercase; display: block; margin-bottom: 6px; }
+  .stream-exp pre { font-size: 11.5px; white-space: pre-wrap; word-break: break-all; color: var(--text); margin: 0; line-height: 1.6; }
+  #count-badge { background: var(--accent-dim); color: var(--accent-l); padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  #err-badge   { background: rgba(239,68,68,.15); color: var(--red); padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .toolbar-pill { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); padding: 4px 10px; border-radius: 20px; cursor: pointer; white-space: nowrap; transition: all .15s; user-select: none; }
+  .toolbar-pill:hover { border-color: var(--border2); color: var(--text); }
+  .toolbar-pill input { margin: 0; cursor: pointer; accent-color: var(--accent); }
+  .toolbar-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+  /* Fullscreen */
+  body.fullscreen-mode .sidebar,
+  body.fullscreen-mode .top-header { display: none !important; }
+  body.fullscreen-mode .app-shell  { height: 100vh; }
+  body.fullscreen-mode .main-area  { height: 100vh; display: flex; flex-direction: column; }
+  body.fullscreen-mode #stream-box { flex: 1; }
+  body.fullscreen-mode .live-toolbar { background: rgba(13,13,20,.96); border-bottom-color: var(--border2); }
 </style>
 
 <div class="app-shell">
   <%- include('partials/sidebar') %>
   <div class="main-area">
+
     <header class="top-header">
       <div class="page-title">Live Stream</div>
       <div class="header-actions">
@@ -75,261 +65,305 @@
       </div>
     </header>
 
-    <!-- Toolbar -->
     <div class="live-toolbar">
-      <div class="chip-bar" style="margin-bottom:0;flex-wrap:nowrap;">
-        <span style="font-size:11px;color:var(--text3);white-space:nowrap;">Filter:</span>
+      <!-- Level chips -->
+      <div class="chip-bar" style="margin-bottom:0;flex-wrap:nowrap;gap:5px;">
+        <span style="font-size:11px;color:var(--text3);white-space:nowrap;line-height:26px;">Filter:</span>
         <span class="chip active" id="chip-all"   onclick="setLevel('')">All</span>
         <span class="chip error"  id="chip-error" onclick="setLevel('error')">Error</span>
         <span class="chip warn"   id="chip-warn"  onclick="setLevel('warn')">Warn</span>
         <span class="chip info"   id="chip-info"  onclick="setLevel('info')">Info</span>
         <span class="chip"        id="chip-debug" onclick="setLevel('debug')">Debug</span>
       </div>
-
-      <div style="flex:1"></div>
-
-      <!-- Expand All Checkbox (excludes api-request) -->
-      <label class="toolbar-checkbox">
-        <input type="checkbox" id="expand-all-checkbox"> Expand all (except API requests)
-      </label>
-
-      <select id="svc-filter" class="form-select" style="width:160px;" onchange="applyServiceFilter()">
+      <div class="toolbar-sep"></div>
+      <!-- Service filter -->
+      <select id="svc-filter" class="form-select" style="width:150px;height:28px;padding:3px 8px;" onchange="applyServiceFilter()">
         <option value="">All Services</option>
         <% services.forEach(function(s) { %>
         <option value="<%= s.appName %>"><%= s.appName %></option>
         <% }) %>
       </select>
-
-      <div class="search-wrap" style="width:200px;">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input id="kw-filter" type="text" class="form-input search-input" placeholder="Keyword filter…" oninput="applyFilters()"/>
+      <!-- Keyword -->
+      <div class="search-wrap" style="width:180px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="kw-filter" type="text" class="form-input search-input" style="height:28px;padding:3px 8px 3px 30px;" placeholder="Keyword filter…" oninput="applyFilters()"/>
       </div>
+      <div class="toolbar-sep"></div>
+      <!-- Expand all -->
+      <label class="toolbar-pill">
+        <input type="checkbox" id="expand-all-checkbox"> Expand all
+      </label>
+      <div style="flex:1"></div>
+      <!-- Action buttons -->
+    <button id="scroll-btn" class="btn btn-secondary btn-sm" onclick="toggleScroll()" title="Auto-scroll enabled">
+  <div style="display:flex;align-items:center;gap:6px;">
+    
+    <div style="position:relative;">
+      <svg id="scroll-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/>
+        <polyline points="17,18 23,18 23,12"/>
+      </svg>
 
-      <button id="scroll-btn" class="btn btn-secondary btn-sm" onclick="toggleScroll()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/><polyline points="17,18 23,18 23,12"/></svg>
-        Auto-scroll ON
+      <!-- status dot -->
+      <span id="scroll-dot"
+        style="position:absolute;top:-2px;right:-2px;width:6px;height:6px;border-radius:50%;background:#22c55e;">
+      </span>
+    </div>
+
+    <span style="font-size:11px;">Auto</span>
+  </div>
+</button>
+      <button id="pause-btn" class="btn btn-secondary btn-sm" onclick="togglePause()" title="Pause / Resume (Space)">
+        <svg id="pause-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        <span id="pause-label">Pause</span>
       </button>
-      <button id="pause-btn" class="btn btn-secondary btn-sm" onclick="togglePause()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-        Pause
-      </button>
-      <button class="btn btn-secondary btn-sm" onclick="clearStream()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"/></svg>
+      <button class="btn btn-danger btn-sm" onclick="clearStream()" title="Clear stream (Ctrl+K)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"/></svg>
         Clear
       </button>
+      <div class="toolbar-sep"></div>
+      <button id="fs-btn" class="btn btn-secondary btn-sm" onclick="toggleFullscreen()" title="Toggle fullscreen (F)">
+        <svg id="fs-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        <span id="fs-label">Fullscreen</span>
+      </button>
     </div>
 
-    <!-- Stream box -->
     <div id="stream-box">
       <div class="empty-state" id="empty-hint">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 7.76a6 6 0 0 0 0 8.49"/></svg>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 7.76a6 6 0 0 0 0 8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
         <p>Waiting for live logs…</p>
+        <p style="font-size:11px;margin-top:4px;color:var(--text3)">Send logs via the ingest API — they appear here in real time</p>
       </div>
     </div>
+
   </div>
 </div>
 
 <script>
-const MAX_LINES = 1000;
-let   paused   = false;
-let   autoScroll = true;
-let   levelFilter = '';
-let   svcFilter   = '';
-let   kwFilter    = '';
-let   totalCount  = 0;
-let   errCount    = 0;
-const buffer = [];
+const MAX_LINES  = 1000;
+let paused       = false;
+let autoScroll   = true;
+let isFullscreen = false;
+let levelFilter  = '';
+let svcFilter    = '';
+let kwFilter     = '';
+let totalCount   = 0;
+let errCount     = 0;
+const buffer     = [];
 
-const box     = document.getElementById('stream-box');
-const connDot = document.getElementById('conn-dot');
-const connLbl = document.getElementById('conn-label');
-const countEl = document.getElementById('count-badge');
-const errEl   = document.getElementById('err-badge');
-const expandAllCheckbox = document.getElementById('expand-all-checkbox');
+const box       = document.getElementById('stream-box');
+const connDot   = document.getElementById('conn-dot');
+const connLbl   = document.getElementById('conn-label');
+const countEl   = document.getElementById('count-badge');
+const errEl     = document.getElementById('err-badge');
+const expandAll = document.getElementById('expand-all-checkbox');
 
-// Helper: escape HTML
+// box.addEventListener('scroll', () => {
+//   const isNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 50;
+
+//   if (!isNearBottom && autoScroll) {
+//     autoScroll = false;
+//     toggleScroll(); // auto switch OFF
+//   }
+// });
+
 function escHtml(s) {
-  if (!s) return '';
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-// Format timestamp
 function formatTime(iso) {
-  if (!iso) return new Date().toLocaleTimeString('en-GB', { hour12: false });
+  if (!iso) return new Date().toLocaleTimeString('en-GB',{hour12:false});
   try {
     const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso.slice(0,19).replace('T',' ');
-    return d.toLocaleString(undefined, { hour12: false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
-  } catch { return iso; }
+    if (isNaN(d)) return String(iso).slice(0,19).replace('T',' ');
+    return d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('en-GB',{hour12:false});
+  } catch { return String(iso).slice(0,19); }
 }
 
-// Extract data object
-function extractDataObject(log) {
-  if (log && log.data !== undefined) return log.data;
-  if (log && log.payload) return log.payload;
-  return null;
+function isApiRequest(svc) { return svc === 'api-req' || svc === 'api_request'; }
+
+function shouldShow(level, app, svc, raw) {
+  if (levelFilter && level !== levelFilter) return false;
+  if (svcFilter && app !== svcFilter && svc !== svcFilter) return false;
+  if (kwFilter && !raw.toLowerCase().includes(kwFilter.toLowerCase())) return false;
+  return true;
 }
 
-// Check if a log entry is API request type
-function isApiRequest(svc) {
-  return svc === 'api-req' || svc === 'api_request';
-}
-
-// Expand or collapse all detail panels (except API requests if checkbox is on)
-function applyExpandAll() {
-  const shouldExpand = expandAllCheckbox.checked;
-  const entries = document.querySelectorAll('.stream-line');
-  entries.forEach(line => {
-    const svc = line.dataset.svc || '';
-    const isApi = isApiRequest(svc);
-    // If checkbox is on: expand all EXCEPT api-request
-    // If checkbox is off: collapse all
-    const expand = shouldExpand && !isApi;
-    const expDiv = line.nextElementSibling;
-    if (expDiv && expDiv.classList.contains('stream-exp')) {
-      expDiv.style.display = expand ? 'block' : 'none';
-      line.classList.toggle('expanded', expand);
-    }
-  });
-}
-
-// Add a log line
 function addLine(raw) {
-  const emptyHint = document.getElementById('empty-hint');
-  if (emptyHint) emptyHint.remove();
+  const hint = document.getElementById('empty-hint');
+  if (hint) hint.remove();
 
-  let parsed = null, level = 'info', ts = '', appName = '', service = '', msg = '', dataObj = null;
+  let parsed = null, level = 'info', ts = '', appName = '', service = '', msg = '';
   try {
-    parsed = JSON.parse(raw);
-    level = (parsed.level || 'info').toLowerCase();
-    ts = parsed.ts || parsed.timestamp || new Date().toISOString();
-    appName = parsed.appName || parsed._appName || 'qs-api';
-    service = parsed.service || parsed.type || (parsed.message?.includes('api_request') ? 'api-req' : 'general');
-    msg = parsed.message || parsed.msg || '';
-    dataObj = extractDataObject(parsed);
-  } catch {
-    msg = raw;
-    service = 'raw';
-  }
+    parsed  = JSON.parse(raw);
+    level   = (parsed.level || 'info').toLowerCase();
+    ts      = parsed.ts || parsed.timestamp || new Date().toISOString();
+    appName = parsed.appName || parsed._appName || '';
+    service = parsed.service || parsed.type || '';
+    msg     = parsed.message || parsed.msg || '';
+  } catch { msg = raw; service = 'raw'; }
 
   totalCount++;
   if (level === 'error') {
     errCount++;
     errEl.style.display = '';
-    errEl.textContent = errCount + ' errors';
+    errEl.textContent   = errCount + ' error' + (errCount !== 1 ? 's' : '');
   }
-  countEl.textContent = totalCount + ' logs';
+  countEl.textContent = totalCount.toLocaleString() + ' log' + (totalCount !== 1 ? 's' : '');
 
-  // Filter check
-  if (levelFilter && level !== levelFilter) return;
-  if (svcFilter && appName !== svcFilter && service !== svcFilter) return;
-  if (kwFilter && !raw.toLowerCase().includes(kwFilter.toLowerCase())) return;
+  if (!shouldShow(level, appName, service, raw)) return;
 
-  const div = document.createElement('div');
-  div.className = `stream-line level-${level}`;
-  div.dataset.raw = raw;
-  div.dataset.level = level;
-  div.dataset.svc = service;
+  const line = document.createElement('div');
+  line.className     = 'stream-line level-' + level;
+  line.dataset.raw   = raw;
+  line.dataset.level = level;
+  line.dataset.app   = appName;
+  line.dataset.svc   = service;
 
-  // Tooltip titles for truncated names
-  const appTitle = appName;
-  const serviceTitle = service;
+  const shortApp = appName.length > 16 ? appName.slice(0,14) + '…' : appName;
+  const shortSvc = service.length  > 14 ? service.slice(0,12) + '…' : service;
 
-  div.innerHTML = `
-    <span class="stream-ts">${escHtml(formatTime(ts))}</span>
-    <span class="badge badge-${level}">${level}</span>
-    <span class="stream-app" title="${escHtml(appTitle)}">${escHtml(appName.length > 18 ? appName.slice(0,16)+'..' : appName)}</span>
-    <span class="stream-service" title="${escHtml(serviceTitle)}">${escHtml(service.length > 18 ? service.slice(0,16)+'..' : service)}</span>
-    <span class="stream-msg">${escHtml(msg.substring(0, 500))}${msg.length > 500 ? '…' : ''}</span>
-    <span class="expand-icon">▼</span>
-  `;
+  line.innerHTML =
+    '<span class="stream-ts">' + escHtml(formatTime(ts)) + '</span>' +
+    '<span class="badge badge-' + level + '" style="margin-top:2px;flex-shrink:0">' + level + '</span>' +
+    (appName ? '<span class="stream-app" title="' + escHtml(appName) + '">' + escHtml(shortApp) + '</span>' : '') +
+    (service ? '<span class="stream-svc" title="' + escHtml(service) + '">' + escHtml(shortSvc) + '</span>' : '') +
+    '<span class="stream-msg">' + escHtml(msg.slice(0,600)) + (msg.length > 600 ? ' …' : '') + '</span>' +
+    '<span class="expand-arrow">▼</span>';
 
-  const expDiv = document.createElement('div');
-  expDiv.className = 'stream-exp';
-  let detailContent = dataObj
-    ? `<strong>📦 DATA OBJECT</strong><pre>${escHtml(JSON.stringify(dataObj, null, 2))}</pre>`
-    : `<strong>📄 FULL LOG</strong><pre>${escHtml(JSON.stringify(parsed, null, 2))}</pre>`;
-  expDiv.innerHTML = detailContent;
-  expDiv.style.display = 'none';
-
-  // Click to toggle individual expansion
-  div.onclick = (e) => {
-    e.stopPropagation();
-    const isOpen = expDiv.style.display === 'block';
-    expDiv.style.display = isOpen ? 'none' : 'block';
-    div.classList.toggle('expanded', !isOpen);
-    // If manually toggling, we don't auto-sync checkbox, but that's fine
-  };
-
-  box.appendChild(div);
-  box.appendChild(expDiv);
-
-  // If expand-all is active and this is NOT an API request, auto-expand
-  if (expandAllCheckbox.checked && !isApiRequest(service)) {
-    expDiv.style.display = 'block';
-    div.classList.add('expanded');
+  const detail = document.createElement('div');
+  detail.className = 'stream-exp';
+  const dataObj = parsed && parsed.data !== undefined ? parsed.data : (parsed && parsed.payload !== undefined ? parsed.payload : null);
+  if (dataObj !== null) {
+    detail.innerHTML = '<strong>📦 Data Object</strong><pre>' + escHtml(JSON.stringify(dataObj, null, 2)) + '</pre>';
+  } else if (parsed) {
+    detail.innerHTML = '<strong>📄 Full Log Entry</strong><pre>' + escHtml(JSON.stringify(parsed, null, 2)) + '</pre>';
+  } else {
+    detail.innerHTML = '<strong>📄 Raw</strong><pre>' + escHtml(raw) + '</pre>';
   }
 
-  while (box.children.length > MAX_LINES * 2) box.removeChild(box.firstChild);
-  if (autoScroll) box.scrollTop = box.scrollHeight;
+  line.addEventListener('click', () => {
+    const open = detail.style.display === 'block';
+    detail.style.display = open ? 'none' : 'block';
+    line.classList.toggle('expanded', !open);
+  });
+
+  box.appendChild(line);
+  box.appendChild(detail);
+
+  if (expandAll.checked && !isApiRequest(service)) {
+    detail.style.display = 'block';
+    line.classList.add('expanded');
+  }
+
+  while (box.children.length > MAX_LINES * 2 + 2) {
+    box.removeChild(box.firstChild);
+    if (box.firstChild) box.removeChild(box.firstChild);
+  }
+
+  const isNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 50;
+
+if (autoScroll && isNearBottom) {
+  box.scrollTop = box.scrollHeight;
+}
 }
 
-// Filters
 function applyFilters() {
-  kwFilter = document.getElementById('kw-filter').value;
+  kwFilter  = document.getElementById('kw-filter').value;
   svcFilter = document.getElementById('svc-filter').value;
-  document.querySelectorAll('.stream-line').forEach(el => {
-    const lv = el.dataset.level || 'info';
-    const sv = el.dataset.svc || '';
-    const raw = el.dataset.raw || el.textContent;
-    let show = true;
-    if (levelFilter && lv !== levelFilter) show = false;
-    if (svcFilter && sv !== svcFilter) show = false;
-    if (kwFilter && !raw.toLowerCase().includes(kwFilter.toLowerCase())) show = false;
-    el.style.display = show ? '' : 'none';
-    const next = el.nextElementSibling;
-    if (next && next.classList.contains('stream-exp')) {
-      if (!show) next.style.display = 'none';
-      else if (expandAllCheckbox.checked && !isApiRequest(sv)) next.style.display = 'block';
+  box.querySelectorAll('.stream-line').forEach(el => {
+    const lv  = el.dataset.level || 'info';
+    const app = el.dataset.app   || '';
+    const sv  = el.dataset.svc   || '';
+    const raw = el.dataset.raw   || el.textContent;
+    const vis = shouldShow(lv, app, sv, raw);
+    el.style.display = vis ? '' : 'none';
+    const det = el.nextElementSibling;
+    if (det && det.classList.contains('stream-exp')) {
+      if (!vis) det.style.display = 'none';
+      else if (expandAll.checked && !isApiRequest(sv)) det.style.display = 'block';
     }
   });
 }
+
 function applyServiceFilter() { applyFilters(); }
+
 function setLevel(lvl) {
   levelFilter = lvl;
-  ['all','error','warn','info','debug'].forEach(k => {
-    document.getElementById('chip-'+k).classList.toggle('active', k === (lvl || 'all'));
-  });
+  ['all','error','warn','info','debug'].forEach(k =>
+    document.getElementById('chip-' + k).classList.toggle('active', k === (lvl || 'all'))
+  );
   applyFilters();
 }
 
-// Controls
+expandAll.addEventListener('change', () => {
+  const on = expandAll.checked;
+  box.querySelectorAll('.stream-line').forEach(el => {
+    const sv  = el.dataset.svc || '';
+    const det = el.nextElementSibling;
+    if (!det || !det.classList.contains('stream-exp')) return;
+    if (el.style.display === 'none') return;
+    const expand = on && !isApiRequest(sv);
+    det.style.display = expand ? 'block' : 'none';
+    el.classList.toggle('expanded', expand);
+  });
+});
+
 function togglePause() {
   paused = !paused;
-  const btn = document.getElementById('pause-btn');
-  btn.innerHTML = paused
-    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21 5,3"/></svg> Resume`
-    : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause`;
+  document.getElementById('pause-label').textContent = paused ? 'Resume' : 'Pause';
+  const icon = document.getElementById('pause-icon');
+  icon.innerHTML = paused
+    ? '<polygon points="5,3 19,12 5,21 5,3"/>'
+    : '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+  document.getElementById('pause-btn').classList.toggle('btn-primary', paused);
   if (!paused) { buffer.forEach(addLine); buffer.length = 0; applyFilters(); }
 }
+
 function toggleScroll() {
   autoScroll = !autoScroll;
-  const btn = document.getElementById('scroll-btn');
-  btn.innerHTML = autoScroll
-    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/><polyline points="17,18 23,18 23,12"/></svg> Auto-scroll ON`
-    : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/><polyline points="17,18 23,18 23,12"/></svg> Auto-scroll OFF`;
+
+  const btn  = document.getElementById('scroll-btn');
+  const icon = document.getElementById('scroll-icon');
+  const dot  = document.getElementById('scroll-dot');
+
+  btn.classList.toggle('btn-primary', autoScroll);
+
+  if (autoScroll) {
+    icon.style.opacity = '1';
+    dot.style.background = '#22c55e'; // green
+    btn.title = 'Auto-scroll enabled';
+
+    box.scrollTop = box.scrollHeight;
+  } else {
+    icon.style.opacity = '0.4';
+    dot.style.background = '#ef4444'; // red
+    btn.title = 'Auto-scroll paused';
+  }
 }
 function clearStream() {
-  box.innerHTML = '<div class="empty-state" id="empty-hint"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 7.76a6 6 0 0 0 0 8.49"/></svg><p>Stream cleared</p></div>';
+  box.innerHTML = '<div class="empty-state" id="empty-hint">' +
+    '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 7.76a6 6 0 0 0 0 8.49"/></svg>' +
+    '<p>Stream cleared — waiting for new logs…</p></div>';
   totalCount = errCount = 0;
   countEl.textContent = '0 logs';
   errEl.style.display = 'none';
 }
 
-// Expand all checkbox listener
-expandAllCheckbox.addEventListener('change', applyExpandAll);
+function toggleFullscreen() {
+  isFullscreen = !isFullscreen;
+  document.body.classList.toggle('fullscreen-mode', isFullscreen);
+  document.getElementById('fs-label').textContent = isFullscreen ? 'Exit Fullscreen' : 'Fullscreen';
+  const icon = document.getElementById('fs-icon');
+  icon.innerHTML = isFullscreen
+    ? '<polyline points="4,14 10,14 10,20"/><polyline points="20,10 14,10 14,4"/><line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/>'
+    : '<polyline points="15,3 21,3 21,9"/><polyline points="9,21 3,21 3,15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>';
+  if (autoScroll) setTimeout(() => { box.scrollTop = box.scrollHeight; }, 50);
+}
 
-// SSE connection
+// SSE
 let es;
 function connect() {
   es = new EventSource('/api/logs/stream', { withCredentials: true });
@@ -350,8 +384,13 @@ connect();
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); clearStream(); }
-  if (e.key === ' ' && e.target === document.body) { e.preventDefault(); togglePause(); }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && k === 'k') { e.preventDefault(); clearStream(); return; }
+  if (k === ' ')      { e.preventDefault(); togglePause(); return; }
+  if (k === 'f')      { e.preventDefault(); toggleFullscreen(); return; }
+  if (k === 'a')      { e.preventDefault(); toggleScroll(); return; }
+  if (k === 'escape' && isFullscreen) { toggleFullscreen(); }
 });
 </script>
 </body></html>
