@@ -164,7 +164,7 @@ app.use(Logger.requestLogger());</pre>
                 <th>Endpoint <button class="sort-btn" data-col="path" onclick="sortTable(this)">↕</button></th>
                 <th>Calls <button class="sort-btn" data-col="count" onclick="sortTable(this)">↕</button></th>
                 <th>Avg <button class="sort-btn" data-col="avgDuration" onclick="sortTable(this)">↕</button></th>
-                <th>P95</th>
+                <!-- <th>P95</th> -->
                 <th>Max</th>
                 <th>Avg Res</th>
                 <th>Errors <button class="sort-btn" data-col="errors" onclick="sortTable(this)">↕</button></th>
@@ -410,7 +410,6 @@ function renderTable() {
         <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;max-width:260px;" class="truncate">${esc(e.path)}</td>
         <td style="font-weight:600;color:var(--text);">${e.count.toLocaleString()}</td>
         <td><span class="dur-pill ${durClass(e.avgDuration)}">${fmtMs(e.avgDuration)}</span></td>
-        <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text2);">${fmtMs(e.p95Duration)}</td>
         <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text2);">${fmtMs(e.maxDuration)}</td>
         <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text3);">${fmtBytes(e.avgResBytes)}</td>
         <td style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:${e.errors > 0 ? 'var(--red)' : 'var(--text3)'};">${e.errors}</td>
