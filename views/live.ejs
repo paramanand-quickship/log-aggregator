@@ -21,16 +21,43 @@
   .stream-line.level-info  { border-left-color: var(--blue); }
   .stream-line.level-debug { border-left-color: var(--gray); opacity:.7; }
   .stream-ts  { color: var(--text3); white-space: nowrap; font-size: 11px; padding-top:1px; min-width:160px; }
-  .stream-svc { color: var(--accent-l); white-space: nowrap; font-size:11px; min-width:90px; max-width:100px; overflow:hidden; text-overflow:ellipsis; }
+  .stream-app {
+    color: var(--accent-l);
+    white-space: nowrap;
+    font-size: 11px;
+    width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+  }
+  .stream-service {
+    color: var(--text2);
+    white-space: nowrap;
+    font-size: 11px;
+    width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+  }
   .stream-msg { flex:1; word-break:break-all; color:var(--text); }
   .stream-exp { display:none; padding: 6px 10px 8px; background:var(--surface3); border-radius:4px; margin:0 10px 4px; }
-  .stream-exp pre { font-size:11px; white-space:pre-wrap; word-break:break-all; color:var(--text); }
+  .stream-exp pre { font-size:11px; white-space:pre-wrap; word-break:break-all; color:var(--text); margin:0; }
   #count-badge { background: var(--accent-dim); color: var(--accent-l); padding: 2px 10px; border-radius:10px; font-size:11px; font-weight:600; }
   #err-badge   { background: rgba(239,68,68,.15); color:var(--red); padding:2px 10px; border-radius:10px; font-size:11px; font-weight:600; }
-  .api-req-line {
-  border-left-color: #22c55e !important;
-  background: rgba(34,197,94,0.06);
-}
+  .toolbar-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    background: var(--surface2);
+    padding: 4px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+  }
+  .toolbar-checkbox input {
+    margin: 0;
+    cursor: pointer;
+  }
 </style>
 
 <div class="app-shell">
@@ -50,7 +77,6 @@
 
     <!-- Toolbar -->
     <div class="live-toolbar">
-      <!-- Level filter chips -->
       <div class="chip-bar" style="margin-bottom:0;flex-wrap:nowrap;">
         <span style="font-size:11px;color:var(--text3);white-space:nowrap;">Filter:</span>
         <span class="chip active" id="chip-all"   onclick="setLevel('')">All</span>
@@ -62,7 +88,11 @@
 
       <div style="flex:1"></div>
 
-      <!-- Service filter -->
+      <!-- Expand All Checkbox (excludes api-request) -->
+      <label class="toolbar-checkbox">
+        <input type="checkbox" id="expand-all-checkbox"> Expand all (except API requests)
+      </label>
+
       <select id="svc-filter" class="form-select" style="width:160px;" onchange="applyServiceFilter()">
         <option value="">All Services</option>
         <% services.forEach(function(s) { %>
@@ -70,22 +100,21 @@
         <% }) %>
       </select>
 
-      <!-- Search -->
       <div class="search-wrap" style="width:200px;">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input id="kw-filter" type="text" class="form-input search-input" placeholder="Keyword filter…" oninput="applyFilters()"/>
       </div>
 
       <button id="scroll-btn" class="btn btn-secondary btn-sm" onclick="toggleScroll()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/><polyline points="17,18 23,18 23,12"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/><polyline points="17,18 23,18 23,12"/></svg>
         Auto-scroll ON
       </button>
       <button id="pause-btn" class="btn btn-secondary btn-sm" onclick="togglePause()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
         Pause
       </button>
       <button class="btn btn-secondary btn-sm" onclick="clearStream()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,6 5,6 21,6"/><path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3,6 5,6 21,6"/><path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"/></svg>
         Clear
       </button>
     </div>
@@ -93,7 +122,7 @@
     <!-- Stream box -->
     <div id="stream-box">
       <div class="empty-state" id="empty-hint">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 7.76a6 6 0 0 0 0 8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 7.76a6 6 0 0 0 0 8.49"/></svg>
         <p>Waiting for live logs…</p>
       </div>
     </div>
@@ -109,26 +138,203 @@ let   svcFilter   = '';
 let   kwFilter    = '';
 let   totalCount  = 0;
 let   errCount    = 0;
-const buffer = []; // queue while paused
+const buffer = [];
 
 const box     = document.getElementById('stream-box');
 const connDot = document.getElementById('conn-dot');
 const connLbl = document.getElementById('conn-label');
 const countEl = document.getElementById('count-badge');
 const errEl   = document.getElementById('err-badge');
+const expandAllCheckbox = document.getElementById('expand-all-checkbox');
 
-// ── SSE connection ─────────────────────────────────────────────────────────
+// Helper: escape HTML
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Format timestamp
+function formatTime(iso) {
+  if (!iso) return new Date().toLocaleTimeString('en-GB', { hour12: false });
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso.slice(0,19).replace('T',' ');
+    return d.toLocaleString(undefined, { hour12: false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  } catch { return iso; }
+}
+
+// Extract data object
+function extractDataObject(log) {
+  if (log && log.data !== undefined) return log.data;
+  if (log && log.payload) return log.payload;
+  return null;
+}
+
+// Check if a log entry is API request type
+function isApiRequest(svc) {
+  return svc === 'api-req' || svc === 'api_request';
+}
+
+// Expand or collapse all detail panels (except API requests if checkbox is on)
+function applyExpandAll() {
+  const shouldExpand = expandAllCheckbox.checked;
+  const entries = document.querySelectorAll('.stream-line');
+  entries.forEach(line => {
+    const svc = line.dataset.svc || '';
+    const isApi = isApiRequest(svc);
+    // If checkbox is on: expand all EXCEPT api-request
+    // If checkbox is off: collapse all
+    const expand = shouldExpand && !isApi;
+    const expDiv = line.nextElementSibling;
+    if (expDiv && expDiv.classList.contains('stream-exp')) {
+      expDiv.style.display = expand ? 'block' : 'none';
+      line.classList.toggle('expanded', expand);
+    }
+  });
+}
+
+// Add a log line
+function addLine(raw) {
+  const emptyHint = document.getElementById('empty-hint');
+  if (emptyHint) emptyHint.remove();
+
+  let parsed = null, level = 'info', ts = '', appName = '', service = '', msg = '', dataObj = null;
+  try {
+    parsed = JSON.parse(raw);
+    level = (parsed.level || 'info').toLowerCase();
+    ts = parsed.ts || parsed.timestamp || new Date().toISOString();
+    appName = parsed.appName || parsed._appName || 'qs-api';
+    service = parsed.service || parsed.type || (parsed.message?.includes('api_request') ? 'api-req' : 'general');
+    msg = parsed.message || parsed.msg || '';
+    dataObj = extractDataObject(parsed);
+  } catch {
+    msg = raw;
+    service = 'raw';
+  }
+
+  totalCount++;
+  if (level === 'error') {
+    errCount++;
+    errEl.style.display = '';
+    errEl.textContent = errCount + ' errors';
+  }
+  countEl.textContent = totalCount + ' logs';
+
+  // Filter check
+  if (levelFilter && level !== levelFilter) return;
+  if (svcFilter && appName !== svcFilter && service !== svcFilter) return;
+  if (kwFilter && !raw.toLowerCase().includes(kwFilter.toLowerCase())) return;
+
+  const div = document.createElement('div');
+  div.className = `stream-line level-${level}`;
+  div.dataset.raw = raw;
+  div.dataset.level = level;
+  div.dataset.svc = service;
+
+  // Tooltip titles for truncated names
+  const appTitle = appName;
+  const serviceTitle = service;
+
+  div.innerHTML = `
+    <span class="stream-ts">${escHtml(formatTime(ts))}</span>
+    <span class="badge badge-${level}">${level}</span>
+    <span class="stream-app" title="${escHtml(appTitle)}">${escHtml(appName.length > 18 ? appName.slice(0,16)+'..' : appName)}</span>
+    <span class="stream-service" title="${escHtml(serviceTitle)}">${escHtml(service.length > 18 ? service.slice(0,16)+'..' : service)}</span>
+    <span class="stream-msg">${escHtml(msg.substring(0, 500))}${msg.length > 500 ? '…' : ''}</span>
+    <span class="expand-icon">▼</span>
+  `;
+
+  const expDiv = document.createElement('div');
+  expDiv.className = 'stream-exp';
+  let detailContent = dataObj
+    ? `<strong>📦 DATA OBJECT</strong><pre>${escHtml(JSON.stringify(dataObj, null, 2))}</pre>`
+    : `<strong>📄 FULL LOG</strong><pre>${escHtml(JSON.stringify(parsed, null, 2))}</pre>`;
+  expDiv.innerHTML = detailContent;
+  expDiv.style.display = 'none';
+
+  // Click to toggle individual expansion
+  div.onclick = (e) => {
+    e.stopPropagation();
+    const isOpen = expDiv.style.display === 'block';
+    expDiv.style.display = isOpen ? 'none' : 'block';
+    div.classList.toggle('expanded', !isOpen);
+    // If manually toggling, we don't auto-sync checkbox, but that's fine
+  };
+
+  box.appendChild(div);
+  box.appendChild(expDiv);
+
+  // If expand-all is active and this is NOT an API request, auto-expand
+  if (expandAllCheckbox.checked && !isApiRequest(service)) {
+    expDiv.style.display = 'block';
+    div.classList.add('expanded');
+  }
+
+  while (box.children.length > MAX_LINES * 2) box.removeChild(box.firstChild);
+  if (autoScroll) box.scrollTop = box.scrollHeight;
+}
+
+// Filters
+function applyFilters() {
+  kwFilter = document.getElementById('kw-filter').value;
+  svcFilter = document.getElementById('svc-filter').value;
+  document.querySelectorAll('.stream-line').forEach(el => {
+    const lv = el.dataset.level || 'info';
+    const sv = el.dataset.svc || '';
+    const raw = el.dataset.raw || el.textContent;
+    let show = true;
+    if (levelFilter && lv !== levelFilter) show = false;
+    if (svcFilter && sv !== svcFilter) show = false;
+    if (kwFilter && !raw.toLowerCase().includes(kwFilter.toLowerCase())) show = false;
+    el.style.display = show ? '' : 'none';
+    const next = el.nextElementSibling;
+    if (next && next.classList.contains('stream-exp')) {
+      if (!show) next.style.display = 'none';
+      else if (expandAllCheckbox.checked && !isApiRequest(sv)) next.style.display = 'block';
+    }
+  });
+}
+function applyServiceFilter() { applyFilters(); }
+function setLevel(lvl) {
+  levelFilter = lvl;
+  ['all','error','warn','info','debug'].forEach(k => {
+    document.getElementById('chip-'+k).classList.toggle('active', k === (lvl || 'all'));
+  });
+  applyFilters();
+}
+
+// Controls
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pause-btn');
+  btn.innerHTML = paused
+    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21 5,3"/></svg> Resume`
+    : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause`;
+  if (!paused) { buffer.forEach(addLine); buffer.length = 0; applyFilters(); }
+}
+function toggleScroll() {
+  autoScroll = !autoScroll;
+  const btn = document.getElementById('scroll-btn');
+  btn.innerHTML = autoScroll
+    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/><polyline points="17,18 23,18 23,12"/></svg> Auto-scroll ON`
+    : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/><polyline points="17,18 23,18 23,12"/></svg> Auto-scroll OFF`;
+}
+function clearStream() {
+  box.innerHTML = '<div class="empty-state" id="empty-hint"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 7.76a6 6 0 0 0 0 8.49"/></svg><p>Stream cleared</p></div>';
+  totalCount = errCount = 0;
+  countEl.textContent = '0 logs';
+  errEl.style.display = 'none';
+}
+
+// Expand all checkbox listener
+expandAllCheckbox.addEventListener('change', applyExpandAll);
+
+// SSE connection
 let es;
 function connect() {
   es = new EventSource('/api/logs/stream', { withCredentials: true });
-  es.onopen = () => {
-    connDot.className = 'dot dot-green dot-pulse';
-    connLbl.textContent = 'Live';
-  };
-  es.addEventListener('connected', () => {
-    connDot.className = 'dot dot-green dot-pulse';
-    connLbl.textContent = 'Connected';
-  });
+  es.onopen = () => { connDot.className = 'dot dot-green dot-pulse'; connLbl.textContent = 'Live'; };
+  es.addEventListener('connected', () => { connDot.className = 'dot dot-green dot-pulse'; connLbl.textContent = 'Connected'; });
   es.onmessage = (e) => {
     if (paused) { buffer.push(e.data); if (buffer.length > 500) buffer.shift(); return; }
     addLine(e.data);
@@ -141,149 +347,6 @@ function connect() {
   };
 }
 connect();
-
-// ── Add line ───────────────────────────────────────────────────────────────
-function addLine(raw) {
-  const emptyHint = document.getElementById('empty-hint');
-  if (emptyHint) emptyHint.remove();
-
-  let parsed = null, level = 'info', ts = '', app = '', svc = '', msg = '', dataObj = null;
-
-  try {
-    parsed = JSON.parse(raw);
-
-    level = (parsed.level || 'info').toLowerCase();
-
-    ts = parsed.ts
-      ? parsed.ts.replace('T',' ').slice(0,19)
-      : new Date().toISOString().replace('T',' ').slice(0,19);
-
-    app = parsed.appName || parsed._appName || '';
-
-    // ✅ FIX: fallback for API logs
-    svc = parsed.service || parsed.type || 'api-req';
-
-    msg = parsed.message || parsed.msg || '';
-
-    dataObj = parsed.data ?? null;
-
-  } catch {
-    msg = raw;
-  }
-
-  totalCount++;
-
-  if (level === 'error') {
-    errCount++;
-    errEl.style.display = '';
-    errEl.textContent = errCount + ' errors';
-  }
-
-  countEl.textContent = totalCount + ' logs';
-
-  if (!shouldShow(level, svc, raw)) return;
-
-  const div = document.createElement('div');
-
-  // ✅ FIX: different color for api-req
-  const isApiReq = svc === 'api-req' || svc === 'api_request';
-
-  div.className = `stream-line level-${level} ${isApiReq ? 'api-req-line' : ''}`;
-  div.dataset.raw   = raw;
-  div.dataset.level = level;
-  div.dataset.svc   = svc;
-
-  div.innerHTML = `
-    <span class="stream-ts">${ts}</span>
-    <span class="badge badge-${level}">${level}</span>
-    <span class="stream-svc">${escHtml(app)}</span>
-    <span class="stream-svc">${escHtml(svc)}</span>
-    <span class="stream-msg">${escHtml(msg)}</span>
-  `;
-
-  const expDiv = document.createElement('div');
-  expDiv.className = 'stream-exp';
-  expDiv.style.display = 'none'; // ✅ IMPORTANT FIX
-
-  // ✅ FIX: show data properly
-  const content = dataObj
-    ? JSON.stringify(dataObj, null, 2)
-    : JSON.stringify(parsed, null, 2);
-
-  expDiv.innerHTML = `<pre>${escHtml(content)}</pre>`;
-
-  // ✅ FIX: reliable toggle
-  div.onclick = () => {
-    const isOpen = expDiv.style.display === 'block';
-    expDiv.style.display = isOpen ? 'none' : 'block';
-  };
-
-  box.appendChild(div);
-  box.appendChild(expDiv);
-
-  while (box.children.length > MAX_LINES * 2) {
-    box.removeChild(box.firstChild);
-  }
-
-  if (autoScroll) box.scrollTop = box.scrollHeight;
-}
-// ── Filters ────────────────────────────────────────────────────────────────
-function shouldShow(level, svc, raw) {
-  if (levelFilter && level !== levelFilter) return false;
-  if (svcFilter   && svc !== svcFilter)     return false;
-  if (kwFilter    && !raw.toLowerCase().includes(kwFilter.toLowerCase())) return false;
-  return true;
-}
-
-function applyFilters() {
-  kwFilter  = document.getElementById('kw-filter').value;
-  svcFilter = document.getElementById('svc-filter').value;
-  box.querySelectorAll('.stream-line').forEach(el => {
-    const lv  = el.dataset.level || 'info';
-    const sv  = el.dataset.svc   || '';
-    const raw = el.dataset.raw   || el.textContent;
-    el.style.display = shouldShow(lv, sv, raw) ? '' : 'none';
-  });
-}
-
-function applyServiceFilter() { applyFilters(); }
-
-function setLevel(lvl) {
-  levelFilter = lvl;
-  ['all','error','warn','info','debug'].forEach(k => {
-    document.getElementById('chip-'+k).classList.toggle('active', k === (lvl || 'all'));
-  });
-  applyFilters();
-}
-
-// ── Controls ───────────────────────────────────────────────────────────────
-function togglePause() {
-  paused = !paused;
-  const btn = document.getElementById('pause-btn');
-  btn.innerHTML = paused
-    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5,3 19,12 5,21 5,3"/></svg> Resume`
-    : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause`;
-  if (!paused) { buffer.forEach(addLine); buffer.length = 0; }
-}
-
-function toggleScroll() {
-  autoScroll = !autoScroll;
-  const btn = document.getElementById('scroll-btn');
-  btn.innerHTML = autoScroll
-    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/><polyline points="17,18 23,18 23,12"/></svg> Auto-scroll ON`
-    : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,18 13.5,8.5 8.5,13.5 1,6"/><polyline points="17,18 23,18 23,12"/></svg> Auto-scroll OFF`;
-}
-
-function clearStream() {
-  box.innerHTML = '<div class="empty-state" id="empty-hint"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M7.76 7.76a6 6 0 0 0 0 8.49"/></svg><p>Stream cleared</p></div>';
-  totalCount = errCount = 0;
-  countEl.textContent = '0 logs';
-  errEl.style.display = 'none';
-}
-
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
