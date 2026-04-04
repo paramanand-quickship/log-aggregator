@@ -164,7 +164,7 @@ app.use(Logger.requestLogger());</pre>
                 <th>Endpoint <button class="sort-btn" data-col="path" onclick="sortTable(this)">↕</button></th>
                 <th>Calls <button class="sort-btn" data-col="count" onclick="sortTable(this)">↕</button></th>
                 <th>Avg <button class="sort-btn" data-col="avgDuration" onclick="sortTable(this)">↕</button></th>
-                <!-- <th>P95</th> -->
+                <th>P95</th>
                 <th>Max</th>
                 <th>Avg Res</th>
                 <th>Errors <button class="sort-btn" data-col="errors" onclick="sortTable(this)">↕</button></th>
@@ -410,6 +410,7 @@ function renderTable() {
         <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;max-width:260px;" class="truncate">${esc(e.path)}</td>
         <td style="font-weight:600;color:var(--text);">${e.count.toLocaleString()}</td>
         <td><span class="dur-pill ${durClass(e.avgDuration)}">${fmtMs(e.avgDuration)}</span></td>
+        <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text2);">${fmtMs(e.p95Duration)}</td>
         <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text2);">${fmtMs(e.maxDuration)}</td>
         <td style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text3);">${fmtBytes(e.avgResBytes)}</td>
         <td style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:${e.errors > 0 ? 'var(--red)' : 'var(--text3)'};">${e.errors}</td>
@@ -479,5 +480,181 @@ function downloadCsv() {
 <% if (services && services.length) { %>
 loadAll();
 <% } %>
+// ── Trend Analysis ────────────────────────────────────────────
+let _slowTrendChrt = null, _patternChrt = null, _errTrendChrt = null;
+let _activeTrendTab = 0;
+
+// Set default: last 7 days
+(function() {
+  const end   = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 6);
+  const fmt = d => d.toISOString().slice(0, 10);
+  document.getElementById('trend-end').value   = fmt(end);
+  document.getElementById('trend-start').value = fmt(start);
+})();
+
+function switchTrendTab(idx) {
+  _activeTrendTab = idx;
+  [0,1,2].forEach(i => {
+    document.getElementById('tpanel-'+i).style.display = i===idx ? '' : 'none';
+  });
+  document.querySelectorAll('.ttab').forEach((b,i) => {
+    b.style.borderBottomColor = i===idx ? 'var(--accent)' : 'transparent';
+    b.style.color = i===idx ? 'var(--accent-l)' : 'var(--text2)';
+  });
+}
+switchTrendTab(0);
+
+async function loadTrends() {
+  const { svc } = getParams();
+  const start = document.getElementById('trend-start').value;
+  const end   = document.getElementById('trend-end').value;
+  if (!svc || !start || !end) return;
+
+  const label = document.getElementById('trend-daterange-label');
+  if (label) label.textContent = `${start} → ${end}`;
+
+  document.getElementById('trend-loading').style.display = '';
+  document.getElementById('trend-empty').style.display = 'none';
+
+  try {
+    const [slowData, patternData, errData] = await Promise.all([
+      api(`/api/api-analytics/slow-trend?service=${encodeURIComponent(svc)}&start=${start}&end=${end}`),
+      api(`/api/api-analytics/hourly-pattern?service=${encodeURIComponent(svc)}&start=${start}&end=${end}`),
+      api(`/api/api-analytics/error-trend?service=${encodeURIComponent(svc)}&start=${start}&end=${end}`),
+    ]);
+
+    const hasData = slowData.some(d => d.totalRequests > 0);
+    document.getElementById('trend-empty').style.display = hasData ? 'none' : '';
+    if (!hasData) return;
+
+    renderSlowTrend(slowData);
+    renderHourlyPattern(patternData);
+    renderErrorTrend(errData);
+  } catch(e) {
+    document.getElementById('trend-loading').textContent = 'Failed: ' + e.message;
+  } finally {
+    document.getElementById('trend-loading').style.display = 'none';
+  }
+}
+
+function renderSlowTrend(data) {
+  const labels = data.map(d => d.date.slice(5)); // MM-DD
+  const avgs   = data.map(d => d.avgDuration);
+  const p95s   = data.map(d => d.p95Duration);
+
+  if (_slowTrendChrt) _slowTrendChrt.destroy();
+  _slowTrendChrt = new Chart(document.getElementById('slow-trend-chart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Avg (ms)', data: avgs, borderColor:'rgba(99,102,241,.9)', backgroundColor:'rgba(99,102,241,.1)', borderWidth:2, tension:.3, pointRadius:3, fill:true },
+        { label: 'P95 (ms)', data: p95s, borderColor:'rgba(245,158,11,.8)', backgroundColor:'transparent',         borderWidth:2, tension:.3, pointRadius:3, borderDash:[4,3] },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:textColor(), font:{ size:11 } } } },
+      scales:{
+        x:{ ticks:{ color:textColor(), font:{size:10} }, grid:{ color:gridColor() } },
+        y:{ ticks:{ color:textColor(), font:{size:10}, callback: v => v+'ms' }, grid:{ color:gridColor() } }
+      }
+    }
+  });
+
+  // Meta: worst day, best day
+  const withData = data.filter(d => d.totalRequests > 0);
+  if (!withData.length) return;
+  const worst = withData.reduce((a, b) => a.avgDuration > b.avgDuration ? a : b);
+  const best  = withData.reduce((a, b) => a.avgDuration < b.avgDuration ? a : b);
+  const trend = avgs.filter(Boolean);
+  const isGetting = trend.length > 1 && trend[trend.length-1] > trend[0] * 1.1 ? 'slower' : trend[trend.length-1] < trend[0] * 0.9 ? 'faster' : 'stable';
+  const trendColor = isGetting === 'slower' ? 'var(--red)' : isGetting === 'faster' ? 'var(--green)' : 'var(--text2)';
+
+  document.getElementById('slow-trend-meta').innerHTML = [
+    `<div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);"><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Slowest day</div><div style="font-size:13px;font-weight:600;color:var(--red);">${worst.date}</div><div style="font-size:11px;color:var(--text2);">${fmtMs(worst.avgDuration)} avg</div></div>`,
+    `<div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);"><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Fastest day</div><div style="font-size:13px;font-weight:600;color:var(--green);">${best.date}</div><div style="font-size:11px;color:var(--text2);">${fmtMs(best.avgDuration)} avg</div></div>`,
+    `<div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);"><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Trend</div><div style="font-size:13px;font-weight:600;color:${trendColor};">${isGetting}</div><div style="font-size:11px;color:var(--text2);">over the period</div></div>`,
+    worst.slowestPath ? `<div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);min-width:0;flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Slowest endpoint (worst day)</div><div style="font-size:12px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(worst.slowestPath)}</div><div style="font-size:11px;color:var(--text2);">${fmtMs(worst.slowestAvg)} avg on ${worst.date}</div></div>` : '',
+  ].filter(Boolean).join('');
+}
+
+function renderHourlyPattern(data) {
+  const labels    = data.map(d => d.hour + ':00');
+  const durations = data.map(d => d.avgDuration);
+  const maxDur    = Math.max(...durations, 1);
+
+  // Color each bar by intensity: green → yellow → red
+  const bgColors = durations.map(v => {
+    const pct = v / maxDur;
+    if (pct < 0.4)  return 'rgba(34,197,94,.65)';
+    if (pct < 0.7)  return 'rgba(245,158,11,.65)';
+    return 'rgba(239,68,68,.75)';
+  });
+
+  if (_patternChrt) _patternChrt.destroy();
+  _patternChrt = new Chart(document.getElementById('pattern-chart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label:'Avg (ms)', data: durations, backgroundColor: bgColors, borderRadius:2 }] },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false } },
+      scales:{
+        x:{ ticks:{ color:textColor(), font:{size:10}, maxTicksLimit:12 }, grid:{ color:gridColor() } },
+        y:{ ticks:{ color:textColor(), font:{size:10}, callback: v => v+'ms' }, grid:{ color:gridColor() } }
+      }
+    }
+  });
+
+  const peakHour = data.reduce((a, b) => a.avgDuration > b.avgDuration ? a : b);
+  const quietHour = data.filter(d => d.count > 0).reduce((a, b) => a.avgDuration < b.avgDuration ? a : b, data.find(d => d.count > 0) || data[0]);
+  const insight = document.getElementById('pattern-insight');
+  if (insight && peakHour.avgDuration > 0) {
+    insight.innerHTML = `Peak hour: <strong style="color:var(--red);">${peakHour.hour}:00 UTC</strong> (avg ${fmtMs(peakHour.avgDuration)}, ${peakHour.count.toLocaleString()} requests)` +
+      (quietHour ? `  ·  Quietest: <strong style="color:var(--green);">${quietHour.hour}:00 UTC</strong> (avg ${fmtMs(quietHour.avgDuration)})` : '');
+  }
+}
+
+function renderErrorTrend(data) {
+  const labels     = data.map(d => d.date.slice(5));
+  const rates      = data.map(d => parseFloat(d.errorRate) || 0);
+  const counts     = data.map(d => d.errors);
+
+  if (_errTrendChrt) _errTrendChrt.destroy();
+  _errTrendChrt = new Chart(document.getElementById('error-trend-chart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label:'Error rate (%)', data: rates, borderColor:'rgba(239,68,68,.9)', backgroundColor:'rgba(239,68,68,.1)', borderWidth:2, tension:.3, pointRadius:3, fill:true, yAxisID:'y' },
+        { label:'Error count',    data: counts, borderColor:'rgba(245,158,11,.7)', backgroundColor:'transparent',         borderWidth:1.5, tension:.3, pointRadius:2, borderDash:[4,3], yAxisID:'y2' },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:textColor(), font:{ size:11 } } } },
+      scales:{
+        x:  { ticks:{ color:textColor(), font:{size:10} }, grid:{ color:gridColor() } },
+        y:  { position:'left',  ticks:{ color:textColor(), font:{size:10}, callback: v => v+'%' }, grid:{ color:gridColor() } },
+        y2: { position:'right', ticks:{ color:textColor(), font:{size:10} }, grid:{ display:false } }
+      }
+    }
+  });
+
+  const withData  = data.filter(d => d.totalRequests > 0);
+  const worstErr  = withData.reduce((a,b) => parseFloat(a.errorRate) > parseFloat(b.errorRate) ? a : b, withData[0]);
+  const totalReq  = withData.reduce((a,b) => a + b.totalRequests, 0);
+  const totalErr  = withData.reduce((a,b) => a + b.errors, 0);
+  const overallRate = totalReq ? ((totalErr / totalReq) * 100).toFixed(1) : '0.0';
+
+  document.getElementById('error-trend-meta').innerHTML = worstErr ? [
+    `<div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);"><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Worst error day</div><div style="font-size:13px;font-weight:600;color:var(--red);">${worstErr.date}</div><div style="font-size:11px;color:var(--text2);">${worstErr.errorRate}% error rate</div></div>`,
+    `<div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);"><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Period avg error rate</div><div style="font-size:13px;font-weight:600;color:${parseFloat(overallRate)>5?'var(--red)':parseFloat(overallRate)>1?'var(--yellow)':'var(--green)'};">${overallRate}%</div><div style="font-size:11px;color:var(--text2);">${totalErr.toLocaleString()} errors of ${totalReq.toLocaleString()}</div></div>`,
+    worstErr.topErrPath ? `<div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);min-width:0;flex:1;"><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Top error endpoint (worst day)</div><div style="font-size:12px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(worstErr.topErrPath)}</div></div>` : '',
+  ].filter(Boolean).join('') : '';
+}
+
 </script>
 </body></html>

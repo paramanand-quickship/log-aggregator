@@ -4,7 +4,8 @@
       "dashboard",
       "logs",
       "live",
-      "analytics"
+      "analytics",
+      "settings"
     ],
     "cards": [
       "stat-logs",
