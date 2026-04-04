@@ -1,0 +1,38 @@
+{
+  "viewer": {
+    "pages": [
+      "dashboard",
+      "logs",
+      "live",
+      "analytics",
+      "settings"
+    ],
+    "cards": [
+      "stat-logs",
+      "stat-errors",
+      "chart-hourly",
+      "recent-errors"
+    ]
+  },
+  "admin": {
+    "pages": [
+      "dashboard",
+      "logs",
+      "live",
+      "analytics",
+      "api-analytics",
+      "health",
+      "settings",
+      "roles"
+    ],
+    "cards": [
+      "stat-logs",
+      "stat-errors",
+      "stat-services",
+      "stat-errorrate",
+      "chart-hourly",
+      "chart-services",
+      "recent-errors"
+    ]
+  }
+}

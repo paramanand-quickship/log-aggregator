@@ -8,55 +8,36 @@ const { scheduleCleanup } = require('./lib/cleanup');
 const { closeAllStreams } = require('./lib/streams');
 const BatchWriter = require('./lib/batchWriter');
 const logger = require('./lib/logger');
-
-// Routes
-const healthRoute = require('./routes/health');
-const authRoute = require('./routes/auth');
-const logsRoute = require('./routes/logs');
-const streamRoute = require('./routes/stream');
-const logsListingRoute = require('./routes/logsListing');
-const filesRoute = require('./routes/files');
-const statsRoute = require('./routes/stats');
+const ejsEngine = require('./lib/ejs');
 
 const app = express();
 
+// ── View engine (custom EJS-compatible renderer) ───────────────────────────
+app.engine('ejs', ejsEngine.renderFile);
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+// ── Security headers ───────────────────────────────────────────────────────
 app.use(
 	helmet({
 		contentSecurityPolicy: {
 			directives: {
 				defaultSrc: ['\'self\''],
-
-				// 🔥 allow SSE / APIs (add port if different)
 				connectSrc: [
 					'\'self\'',
-					'http://localhost:9900',
+					`http://localhost:${config.PORT}`,
+					`ws://localhost:${config.PORT}`,
 					'https://cdn.jsdelivr.net',
 				],
-
-				// scripts (CDN allowed)
 				scriptSrc: [
 					'\'self\'',
 					'\'unsafe-inline\'',
 					'https://cdn.jsdelivr.net',
 					'https://unpkg.com',
 				],
-
 				scriptSrcAttr: ['\'unsafe-inline\''],
-
-				// 🔥 FIXED: allow Google Fonts CSS
-				styleSrc: [
-					'\'self\'',
-					'\'unsafe-inline\'',
-					'https://fonts.googleapis.com',
-				],
-
-				// 🔥 REQUIRED: allow font files
-				fontSrc: [
-					'\'self\'',
-					'https://fonts.gstatic.com',
-					'data:',
-				],
-
+				styleSrc: ['\'self\'', '\'unsafe-inline\'', 'https://fonts.googleapis.com'],
+				fontSrc: ['\'self\'', 'https://fonts.gstatic.com', 'data:'],
 				imgSrc: ['\'self\'', 'data:'],
 			},
 		},
@@ -72,7 +53,10 @@ app.use((req, res, next) => {
     || config.CORS_ORIGINS.includes(origin)
 	) {
 		if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); }
-		res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+		res.setHeader(
+			'Access-Control-Allow-Methods',
+			'GET,POST,PUT,DELETE,OPTIONS',
+		);
 		res.setHeader(
 			'Access-Control-Allow-Headers',
 			'Content-Type, X-Api-Key, Authorization',
@@ -89,51 +73,63 @@ app.use(cookieParser());
 
 // ── Request logger ─────────────────────────────────────────────────────────
 app.use((req, _res, next) => {
-	logger.info(`${req.method} ${req.path}`);
+	logger.debug(`${req.method} ${req.path}`);
 	next();
 });
 
-// ── Static ──────────────────────────────────────────────────────────────────
-app.use(express.static(path.join(__dirname, 'public')));
+// ── Routes ─────────────────────────────────────────────────────────────────
+const healthRoute = require('./routes/health');
+const authRoute = require('./routes/auth');
+const streamRoute = require('./routes/stream');
+const analyticsRoute = require('./routes/analytics');
+const logsRoute = require('./routes/logs');
+const uiRoute = require('./routes/ui');
+const settingsRoute = require('./routes/settings');
+const apiAnalyticsRoute = require('./routes/api-analytics');
+const roleConfigRoute = require('./routes/role-config');
 
-// ── Routes  (ORDER MATTERS — more specific paths first) ────────────────────
-app.use('/health', healthRoute);
-app.use('/auth', authRoute);
-app.use('/stats', statsRoute);
+// ── Batch writer (shared singleton, injected into routes) ──────────────────
+const batchWriter = new BatchWriter();
+logsRoute.setWriter(batchWriter);
+uiRoute.setWriter(batchWriter);
 
-// Stream MUST be mounted before the generic /logs ingest router
-app.use('/logs/stream', streamRoute);
-app.use('/logs/list', logsListingRoute);
-app.use('/logs', logsRoute.router);
-app.use('/files', filesRoute);
+// ── Mount API routes ───────────────────────────────────────────────────────
+app.use('/api/health', healthRoute);
+app.use('/api/auth', authRoute);
+app.use('/api/logs/stream', streamRoute);
+app.use('/api/logs', logsRoute.router);
+app.use('/api/analytics', analyticsRoute);
+app.use('/api/settings', settingsRoute);
+app.use('/api/api-analytics', apiAnalyticsRoute);
+app.use('/api/role-config', roleConfigRoute);
 
-// ── 404 handler ────────────────────────────────────────────────────────────
-app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
+// ── Mount UI routes (EJS) ─────────────────────────────────────────────────
+app.use('/', uiRoute.router);
+
+// ── 404 ────────────────────────────────────────────────────────────────────
+app.use((req, res) => {
+	if (req.path.startsWith('/api/')) { return res.status(404).json({ error: 'Not found' }); }
+	res.status(404).render('404', { title: '404', user: req.user || null });
+});
 
 // ── Global error handler ───────────────────────────────────────────────────
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
-	logger.error(`Unhandled error: ${err.message}`);
+	logger.error(`Unhandled: ${err.stack}`);
+	if (res.headersSent) { return; }
 	res.status(500).json({ error: 'Internal server error' });
 });
 
-// ── Batch writer ───────────────────────────────────────────────────────────
-const batchWriter = new BatchWriter();
-const { setBatchWriter } = require('./routes/logs');
-setBatchWriter(batchWriter);
-
-// ── Scheduled jobs ─────────────────────────────────────────────────────────
+// ── Scheduled cleanup ──────────────────────────────────────────────────────
 scheduleCleanup();
 
-// ── Start server ───────────────────────────────────────────────────────────
+// ── Start ──────────────────────────────────────────────────────────────────
 const server = app.listen(config.PORT, () => {
-	logger.info(`Log aggregator listening on port ${config.PORT}`);
-	logger.info(`Environment : ${config.NODE_ENV}`);
-	logger.info(`Log base dir: ${config.LOG_BASE_DIR}`);
+	logger.info(`Log aggregator v3  →  http://localhost:${config.PORT}`);
+	logger.info(`Env: ${config.NODE_ENV}  |  Log dir: ${config.LOG_BASE_DIR}`);
 	logger.info(
-		`Batching    : size=${config.BATCH_SIZE}, timeout=${config.BATCH_TIMEOUT}ms`,
+		`Batch: size=${config.BATCH_SIZE} timeout=${config.BATCH_TIMEOUT}ms  |  SSE: ${config.ENABLE_STREAM}`,
 	);
-	logger.info(`Stream SSE  : ${config.ENABLE_STREAM}`);
 });
 
 // ── Graceful shutdown ──────────────────────────────────────────────────────
@@ -142,23 +138,19 @@ let shuttingDown = false;
 async function shutdown (signal) {
 	if (shuttingDown) { return; }
 	shuttingDown = true;
-	logger.info(`Received ${signal}. Shutting down gracefully…`);
-
-	// Stop accepting new connections
+	logger.info(`${signal} received. Shutting down…`);
 	server.close(async () => {
 		try {
 			await batchWriter.flushAll();
 		} catch (err) {
-			logger.error(`Flush error: ${err.message}`);
+			logger.error(`Flush: ${err.message}`);
 		}
 		closeAllStreams();
 		logger.info('Shutdown complete.');
 		process.exit(0);
 	});
-
-	// Force exit after 10 s if something hangs
 	setTimeout(() => {
-		logger.error('Forced exit after timeout.');
+		logger.error('Forced exit.');
 		process.exit(1);
 	}, 10_000).unref();
 }
@@ -170,5 +162,5 @@ process.on('uncaughtException', (err) => {
 	shutdown('uncaughtException');
 });
 process.on('unhandledRejection', (r) => {
-	logger.error(`Unhandled rejection: ${r}`);
+	logger.error(`UnhandledRejection: ${r}`);
 });

@@ -1,6 +1,15 @@
 {
   "admin": {
-    "password": "$2a$10$SYR5KVhLeBG0MgAWd4J5jecNm9Txc0DpYJusf4NMnplOQlA2afNGu",
-    "totpSecret": "JNIVMWTYIBRG4UZQIZIFARBVOIXHKXTI"
+    "password": "$2a$12$QqNga56lU9NwgPr4tMKJA.GSiXjNw2lR.MXQ.dG12R2FG8b67R90a",
+    "role": "admin",
+    "totpSecret": null,
+    "createdAt": "2026-01-01T10:00:00.000Z"
+  },
+
+  "viewer": {
+    "password": "$2a$12$QqNga56lU9NwgPr4tMKJA.GSiXjNw2lR.MXQ.dG12R2FG8b67R90a",
+    "role": "viewer",
+    "totpSecret": null,
+    "createdAt": "2026-01-01T10:00:00.000Z"
   }
 }

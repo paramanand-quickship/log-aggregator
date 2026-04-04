@@ -1,0 +1,556 @@
+<%- include('partials/head', { title: 'Health' }) %>
+<div class="app-shell">
+  <%- include('partials/sidebar') %>
+  <div class="main-area">
+
+    <header class="top-header">
+      <div class="page-title">System Health</div>
+      <div class="header-actions">
+        <span id="last-checked" style="font-size:12px;color:var(--text3);">Checked: <strong style="color:var(--text)"><%= new Date(timestamp).toLocaleTimeString() %></strong></span>
+        <span style="font-size:12px;color:var(--text3);margin-left:4px;">· Auto-refresh in <strong id="countdown" style="color:var(--accent-l)">15</strong>s</span>
+        <button class="btn btn-secondary btn-sm" onclick="refreshNow()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    <div class="page-content">
+
+      <!-- ── Stat Cards ─────────────────────────────────────────────── -->
+      <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:16px;">
+
+        <div class="stat-card" id="sc-status">
+          <div class="stat-icon <%= status === 'ok' ? 'green' : 'red' %>">
+            <% if (status === 'ok') { %>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+            <% } else { %>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <% } %>
+          </div>
+          <div>
+            <div class="stat-value" id="sv-status" style="font-size:18px;text-transform:capitalize;color:<%= status === 'ok' ? 'var(--green)' : 'var(--red)' %>"><%= status %></div>
+            <div class="stat-label">Overall Status</div>
+            <div class="stat-sub">All systems</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon blue">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+          </div>
+          <div>
+            <div class="stat-value" id="sv-uptime" style="font-size:16px;"><%= uptimeHuman %></div>
+            <div class="stat-label">Uptime</div>
+            <div class="stat-sub" id="sv-uptime-sec"><%= uptimeSec %>s total</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon purple">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          </div>
+          <div>
+            <div class="stat-value" id="sv-heap"><%= memory.heapUsed %> MB</div>
+            <div class="stat-label">Heap Used</div>
+            <div class="stat-sub" id="sv-heap-of">of <%= memory.heapTotal %> MB total</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon yellow">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div>
+            <div class="stat-value" id="sv-rss"><%= memory.rss %> MB</div>
+            <div class="stat-label">RSS Memory</div>
+            <div class="stat-sub">Resident set size</div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon <%= checks.logDir === 'ok' ? 'green' : 'red' %>">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div>
+            <div class="stat-value" style="font-size:16px;text-transform:capitalize;color:<%= checks.logDir === 'ok' ? 'var(--green)' : 'var(--red)' %>"><%= checks.logDir %></div>
+            <div class="stat-label">Log Directory</div>
+            <div class="stat-sub"><%= overview ? overview.services + ' service(s)' : 'Unknown' %></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Row 2: Memory chart + Process Info ─────────────────────── -->
+      <div class="grid-2" style="margin-bottom:12px;">
+
+        <!-- Memory breakdown -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            Memory Usage
+          </div>
+
+          <div style="display:flex;gap:20px;align-items:center;">
+            <div style="width:130px;height:130px;flex-shrink:0;">
+              <canvas id="memChart"></canvas>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:12px;">
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                  <span style="font-size:12px;color:var(--text2);">Heap Used</span>
+                  <span id="mb-heapused" style="font-size:12px;font-weight:600;color:var(--accent-l);font-family:'JetBrains Mono',monospace"><%= memory.heapUsed %> MB</span>
+                </div>
+                <div class="progress-bar"><div id="pb-heapused" class="progress-fill" style="width:<%= Math.round(memory.heapUsed/memory.heapTotal*100) %>%"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                  <span style="font-size:12px;color:var(--text2);">Heap Total</span>
+                  <span id="mb-heaptotal" style="font-size:12px;font-weight:600;color:var(--blue);font-family:'JetBrains Mono',monospace"><%= memory.heapTotal %> MB</span>
+                </div>
+                <div class="progress-bar"><div id="pb-heaptotal" class="progress-fill" style="background:var(--blue);width:<%= Math.round(memory.heapTotal/memory.rss*100) %>%"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                  <span style="font-size:12px;color:var(--text2);">RSS</span>
+                  <span id="mb-rss" style="font-size:12px;font-weight:600;color:var(--yellow);font-family:'JetBrains Mono',monospace"><%= memory.rss %> MB</span>
+                </div>
+                <div class="progress-bar"><div id="pb-rss" class="progress-fill" style="background:var(--yellow);width:100%"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                  <span style="font-size:12px;color:var(--text2);">External</span>
+                  <span id="mb-ext" style="font-size:12px;font-weight:600;color:var(--text2);font-family:'JetBrains Mono',monospace"><%= memory.external %> MB</span>
+                </div>
+                <div class="progress-bar"><div id="pb-ext" class="progress-fill" style="background:var(--gray);width:<%= Math.round(memory.external/memory.rss*100) %>%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Process Info -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            Process Info
+          </div>
+          <table style="width:100%;">
+            <tbody>
+              <tr>
+                <td style="color:var(--text2);font-size:12px;padding:6px 0;width:130px;border-bottom:1px solid var(--border);">Node Version</td>
+                <td style="font-family:'JetBrains Mono',monospace;font-size:12px;border-bottom:1px solid var(--border);padding:6px 0;"><span class="badge badge-green"><%= proc.version %></span></td>
+              </tr>
+              <tr>
+                <td style="color:var(--text2);font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);">PID</td>
+                <td style="font-family:'JetBrains Mono',monospace;font-size:12px;border-bottom:1px solid var(--border);padding:6px 0;color:var(--text)"><%= proc.pid %></td>
+              </tr>
+              <tr>
+                <td style="color:var(--text2);font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);">Platform</td>
+                <td style="font-family:'JetBrains Mono',monospace;font-size:12px;border-bottom:1px solid var(--border);padding:6px 0;color:var(--text)"><%= proc.platform %> / <%= proc.arch %></td>
+              </tr>
+              <tr>
+                <td style="color:var(--text2);font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);">Environment</td>
+                <td style="font-size:12px;border-bottom:1px solid var(--border);padding:6px 0;">
+                  <span class="badge <%= proc.env === 'production' ? 'badge-error' : 'badge-info' %>"><%= proc.env %></span>
+                </td>
+              </tr>
+              <tr>
+                <td style="color:var(--text2);font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);">CPU User</td>
+                <td style="font-family:'JetBrains Mono',monospace;font-size:12px;border-bottom:1px solid var(--border);padding:6px 0;color:var(--text)" id="cpu-user"><%= cpu.user %>s</td>
+              </tr>
+              <tr>
+                <td style="color:var(--text2);font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);">CPU System</td>
+                <td style="font-family:'JetBrains Mono',monospace;font-size:12px;border-bottom:1px solid var(--border);padding:6px 0;color:var(--text)" id="cpu-sys"><%= cpu.system %>s</td>
+              </tr>
+              <tr>
+                <td style="color:var(--text2);font-size:12px;padding:6px 0;">Working Dir</td>
+                <td style="font-family:'JetBrains Mono',monospace;font-size:11px;padding:6px 0;color:var(--text3);word-break:break-all;"><%= proc.cwd %></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- ── Row 3: Log Storage + Stream & Ingest Config ────────────── -->
+      <div class="grid-2" style="margin-bottom:12px;">
+
+        <!-- Log Storage -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            Log Storage
+          </div>
+          <% if (overview) { %>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border);">
+              <div>
+                <div style="font-size:22px;font-weight:700;color:var(--text)"><%= overview.totalStorage %></div>
+                <div style="font-size:11px;color:var(--text2);margin-top:2px;">Total stored across all services</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:18px;font-weight:600;color:var(--accent-l)"><%= overview.services %></div>
+                <div style="font-size:11px;color:var(--text2);">services</div>
+              </div>
+            </div>
+            <% if (overview.serviceList && overview.serviceList.length) { %>
+            <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;">
+              <% overview.serviceList.slice(0,8).forEach(function(svc){ %>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span class="dot <%= svc.error > 0 ? 'dot-yellow' : 'dot-green' %>"></span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);flex:1;min-width:0;" class="truncate"><%= svc.appName %></span>
+                <span style="font-size:11px;color:var(--text3);white-space:nowrap;"><%= svc.today %> today</span>
+                <% if (svc.error > 0) { %><span class="badge badge-error"><%= svc.error %> err</span><% } %>
+              </div>
+              <% }) %>
+            </div>
+            <% } else { %>
+            <div class="empty-state" style="padding:16px 0;">
+              <p>No services found</p>
+            </div>
+            <% } %>
+            <hr class="divider" style="margin:6px 0;">
+            <div style="display:flex;gap:16px;">
+              <div>
+                <div style="font-size:11px;color:var(--text3);">Retention</div>
+                <div style="font-size:13px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace"><%= cfg.retentionDays %> days</div>
+              </div>
+              <div>
+                <div style="font-size:11px;color:var(--text3);">Base Dir</div>
+                <div style="font-size:11px;color:var(--text2);font-family:'JetBrains Mono',monospace;word-break:break-all;"><%= cfg.logBaseDir %></div>
+              </div>
+            </div>
+          </div>
+          <% } else { %>
+          <div class="empty-state" style="padding:24px 0;"><p>Could not read storage stats</p></div>
+          <% } %>
+        </div>
+
+        <!-- Stream & Ingest Config -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+            Stream & Ingest
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+
+            <!-- SSE status -->
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border);">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="dot <%= checks.stream === 'enabled' ? 'dot-green dot-pulse' : 'dot-gray' %>"></span>
+                <div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text);">SSE Real-time Stream</div>
+                  <div style="font-size:11px;color:var(--text3);">Server-Sent Events</div>
+                </div>
+              </div>
+              <span class="badge <%= checks.stream === 'enabled' ? 'badge-green' : 'badge-debug' %>"><%= checks.stream %></span>
+            </div>
+
+            <% if (checks.stream === 'enabled') { %>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surface3);padding:8px 12px;border-radius:6px;color:var(--text2);">
+              GET /api/logs/stream<span style="color:var(--text3);">?level=error</span>
+            </div>
+            <% } %>
+
+            <hr class="divider" style="margin:2px 0;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:2px;">Batch Writer</div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div style="background:var(--surface2);border-radius:var(--radius);padding:10px;border:1px solid var(--border);">
+                <div style="font-size:20px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace"><%= cfg.batchSize %></div>
+                <div style="font-size:11px;color:var(--text2);margin-top:2px;">Batch Size</div>
+              </div>
+              <div style="background:var(--surface2);border-radius:var(--radius);padding:10px;border:1px solid var(--border);">
+                <div style="font-size:20px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace"><%= cfg.batchTimeout %>ms</div>
+                <div style="font-size:11px;color:var(--text2);margin-top:2px;">Flush Timeout</div>
+              </div>
+              <div style="background:var(--surface2);border-radius:var(--radius);padding:10px;border:1px solid var(--border);">
+                <div style="font-size:16px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace"><%= cfg.maxBodySize %></div>
+                <div style="font-size:11px;color:var(--text2);margin-top:2px;">Max Body</div>
+              </div>
+              <div style="background:var(--surface2);border-radius:var(--radius);padding:10px;border:1px solid var(--border);">
+                <div style="font-size:16px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace"><%= cfg.port %></div>
+                <div style="font-size:11px;color:var(--text2);margin-top:2px;">HTTP Port</div>
+              </div>
+            </div>
+
+            <hr class="divider" style="margin:2px 0;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);margin-bottom:4px;">Webhook Alerts</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="dot <%= cfg.webhookUrl !== '(not set)' ? 'dot-green' : 'dot-gray' %>"></span>
+              <span style="font-size:12px;color:var(--text2);font-family:'JetBrains Mono',monospace"><%= cfg.webhookUrl %></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Row 4: Checks + CORS ────────────────────────────────────── -->
+      <div class="grid-2" style="margin-bottom:12px;">
+
+        <!-- System Checks -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            System Checks
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <%
+              var checkList = [
+                { key: 'logDir',     label: 'Log Directory',    val: checks.logDir,    ok: checks.logDir === 'ok' },
+                { key: 'stream',     label: 'SSE Stream',       val: checks.stream,    ok: checks.stream === 'enabled' },
+                { key: 'nodeVer',    label: 'Node.js',          val: proc.version,     ok: true },
+                { key: 'env',        label: 'Environment',      val: proc.env,         ok: proc.env !== 'production' || true },
+                { key: 'retention',  label: 'Retention Policy', val: cfg.retentionDays + ' days', ok: true },
+                { key: 'webhook',    label: 'Webhook Alerts',   val: cfg.webhookUrl,   ok: cfg.webhookUrl !== '(not set)' },
+              ];
+            %>
+            <% checkList.forEach(function(c){ %>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <% if (c.ok) { %>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+                <% } else { %>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <% } %>
+                <span style="font-size:12px;color:var(--text2);"><%= c.label %></span>
+              </div>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:<%= c.ok ? 'var(--green)' : 'var(--red)' %>"><%= c.val %></span>
+            </div>
+            <% }) %>
+          </div>
+        </div>
+
+        <!-- CORS & Security Config -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Security & CORS
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;">
+
+            <div style="padding:10px 12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border);">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Allowed Origins</div>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <% cfg.corsOrigins.forEach(function(origin){ %>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-l);background:var(--accent-dim);padding:3px 8px;border-radius:4px;display:inline-block;width:fit-content;"><%= origin %></div>
+                <% }) %>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div style="padding:10px 12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border);">
+                <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">API Key</div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+                  <span style="font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text2);">••••••••••••</span>
+                </div>
+              </div>
+              <div style="padding:10px 12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border);">
+                <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">JWT Secret</div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+                  <span style="font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text2);">••••••••••••</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="padding:10px 12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border);">
+              <div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Rate Limits</div>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <div style="display:flex;justify-content:space-between;font-size:12px;">
+                  <span style="color:var(--text2);">Login</span>
+                  <span style="font-family:'JetBrains Mono',monospace;color:var(--text);">10 / 15 min</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;">
+                  <span style="color:var(--text2);">Log Ingest</span>
+                  <span style="font-family:'JetBrains Mono',monospace;color:var(--text);">1000 / min</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;">
+                  <span style="color:var(--text2);">Cookie</span>
+                  <span style="font-family:'JetBrains Mono',monospace;color:var(--text);">httpOnly · sameSite strict</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Row 5: Prometheus Metrics ──────────────────────────────── -->
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+            Prometheus Metrics
+          </span>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <a href="/api/health/metrics" target="_blank" class="btn btn-secondary btn-xs">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Open Raw
+            </a>
+            <button class="btn btn-secondary btn-xs" onclick="copyMetrics()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy
+            </button>
+            <button class="btn btn-secondary btn-xs" onclick="loadMetrics()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Reload
+            </button>
+          </div>
+        </div>
+        <pre id="metrics-output" style="font-family:'JetBrains Mono',monospace;font-size:11.5px;background:var(--surface3);padding:14px;border-radius:8px;overflow-x:auto;color:var(--text2);line-height:1.8;max-height:260px;overflow-y:auto;border:1px solid var(--border);">Loading metrics…</pre>
+      </div>
+
+    </div><!-- /page-content -->
+  </div><!-- /main-area -->
+</div><!-- /app-shell -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ── Initial data from server ─────────────────────────────────────────
+const initMem = <%- JSON.stringify(memory) %>;
+
+// ── Memory doughnut chart ────────────────────────────────────────────
+(function initMemChart() {
+  const isDark = document.documentElement.dataset.theme !== 'light';
+  const ctx = document.getElementById('memChart');
+  if (!ctx) return;
+  window._memChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Heap Used', 'Heap Free', 'External'],
+      datasets: [{
+        data: [
+          initMem.heapUsed,
+          Math.max(0, initMem.heapTotal - initMem.heapUsed),
+          initMem.external
+        ],
+        backgroundColor: [
+          'rgba(99,102,241,.8)',
+          'rgba(99,102,241,.2)',
+          'rgba(107,114,128,.4)',
+        ],
+        borderColor: 'transparent',
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '72%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.parsed} MB`
+          }
+        }
+      }
+    }
+  });
+})();
+
+// ── Load Prometheus metrics ───────────────────────────────────────────
+async function loadMetrics() {
+  const el = document.getElementById('metrics-output');
+  try {
+    const r = await fetch('/api/health/metrics');
+    const t = await r.text();
+    // colorize
+    el.innerHTML = t.split('\n').map(line => {
+      if (line.startsWith('#')) return `<span style="color:var(--text3)">${escHtml(line)}</span>`;
+      const m = line.match(/^([a-z_]+)(\{[^}]*\})?\s+([\d.]+)(.*)$/);
+      if (m) return `<span style="color:var(--accent-l)">${escHtml(m[1])}</span>`
+             + (m[2] ? `<span style="color:var(--text3)">${escHtml(m[2])}</span>` : '')
+             + ` <span style="color:var(--green)">${escHtml(m[3])}</span>`
+             + `<span style="color:var(--text3)">${escHtml(m[4]||'')}</span>`;
+      return escHtml(line);
+    }).join('\n');
+  } catch(e) {
+    el.textContent = 'Failed to load metrics: ' + e.message;
+  }
+}
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function copyMetrics() {
+  const text = document.getElementById('metrics-output').innerText;
+  navigator.clipboard.writeText(text).then(() => toast('Metrics copied!', 'success'));
+}
+
+// ── Auto-refresh health data ─────────────────────────────────────────
+let countdown = 15;
+const countEl = document.getElementById('countdown');
+
+async function refreshHealthData() {
+  try {
+    const r    = await fetch('/api/health');
+    const data = await r.json();
+
+    // update stat cards
+    const heapUsed  = Math.round(data.memory.heapUsed.replace(' MB',''));
+    const heapTotal = Math.round(data.memory.heapTotal.replace(' MB',''));
+    const rss       = Math.round(data.memory.rss.replace(' MB',''));
+
+    document.getElementById('sv-heap').textContent    = data.memory.heapUsed;
+    document.getElementById('sv-heap-of').textContent = 'of ' + data.memory.heapTotal + ' total';
+    document.getElementById('sv-rss').textContent     = data.memory.rss;
+
+    const u = data.uptime;
+    const h = Math.floor(u/3600), m = Math.floor((u%3600)/60), s = u%60;
+    document.getElementById('sv-uptime').textContent     = `${h}h ${m}m ${s}s`;
+    document.getElementById('sv-uptime-sec').textContent = u + 's total';
+
+    // update memory bars
+    const heapPct = Math.round(heapUsed/heapTotal*100);
+    const extPct  = Math.round((parseInt(data.memory.rss)||0)>0 ? 5 : 0);
+    setBar('pb-heapused', heapPct);
+    setBar('pb-heaptotal', Math.round(heapTotal/rss*100));
+    setText('mb-heapused',  data.memory.heapUsed);
+    setText('mb-heaptotal', data.memory.heapTotal);
+    setText('mb-rss',       data.memory.rss);
+
+    // update chart
+    if (window._memChart) {
+      window._memChart.data.datasets[0].data = [heapUsed, Math.max(0, heapTotal-heapUsed), 1];
+      window._memChart.update('none');
+    }
+
+    // update last checked
+    document.getElementById('last-checked').innerHTML =
+      'Checked: <strong style="color:var(--text)">' + new Date().toLocaleTimeString() + '</strong>';
+
+  } catch(e) { /* silent */ }
+}
+
+function refreshNow() {
+  refreshHealthData();
+  loadMetrics();
+  countdown = 15;
+  countEl.textContent = countdown;
+}
+
+function setBar(id, pct) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = Math.min(100, Math.max(0, pct)) + '%';
+}
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+// countdown ticker
+setInterval(() => {
+  countdown--;
+  if (countdown <= 0) {
+    countdown = 15;
+    refreshHealthData();
+    loadMetrics();
+  }
+  countEl.textContent = countdown;
+}, 1000);
+
+// initial loads
+loadMetrics();
+</script>
+</body></html>

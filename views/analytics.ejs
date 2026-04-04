@@ -1,0 +1,209 @@
+<%- include('partials/head', { title: 'Analytics' }) %>
+<div class="app-shell">
+  <%- include('partials/sidebar') %>
+  <div class="main-area">
+    <header class="top-header">
+      <div class="page-title">Analytics</div>
+    </header>
+
+    <div class="page-content">
+      <!-- Filters -->
+      <div class="card" style="margin-bottom:12px;">
+        <form method="GET" action="/analytics">
+          <div class="form-row">
+            <div class="form-group" style="min-width:180px;flex:1.5">
+              <label class="form-label">Service</label>
+              <select name="service" class="form-select" onchange="this.form.submit()">
+                <option value="">All Services</option>
+                <% services.forEach(function(s) { %>
+                <option value="<%= s.appName %>" <%= selected.service===s.appName?'selected':'' %>><%= s.appName %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div class="form-group" style="min-width:150px;">
+              <label class="form-label">Date</label>
+              <input type="date" name="date" class="form-input" value="<%= selected.date %>" max="<%= today %>" onchange="this.form.submit()"/>
+            </div>
+            <div class="form-group" style="display:flex;align-items:flex-end;">
+              <button type="submit" class="btn btn-primary">Apply</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <!-- Level breakdown summary -->
+      <% if (breakdown) { %>
+      <div class="stats-grid" style="margin-bottom:12px;">
+        <div class="stat-card">
+          <div class="stat-icon blue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div><div class="stat-value"><%= breakdown.total.toLocaleString() %></div><div class="stat-label">Total Logs</div><div class="stat-sub"><%= selected.date %></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon red"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+          <div><div class="stat-value"><%= breakdown.error.toLocaleString() %></div><div class="stat-label">Errors</div><div class="stat-sub"><%= breakdown.total ? ((breakdown.error/breakdown.total*100).toFixed(1))+'%' : '0%' %> of total</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon yellow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <div><div class="stat-value"><%= breakdown.warn.toLocaleString() %></div><div class="stat-label">Warnings</div><div class="stat-sub"><%= breakdown.total ? ((breakdown.warn/breakdown.total*100).toFixed(1))+'%' : '0%' %> of total</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg></div>
+          <div><div class="stat-value"><%= breakdown.info.toLocaleString() %></div><div class="stat-label">Info</div><div class="stat-sub"><%= breakdown.debug %> debug</div></div>
+        </div>
+      </div>
+      <% } %>
+
+      <div class="grid-2" style="margin-bottom:12px;">
+        <!-- Hourly chart -->
+        <div class="card span-2">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Log Volume by Hour
+            <span style="margin-left:auto;font-size:11px;color:var(--text3);font-weight:400"><%= selected.date %> · <%= selected.service || 'all services' %></span>
+          </div>
+          <div class="chart-wrap-lg">
+            <canvas id="hourlyChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:12px;">
+        <!-- Level donut -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+            Level Distribution
+          </div>
+          <div class="chart-wrap">
+            <canvas id="levelChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 7-day trend -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+            7-Day Trend
+          </div>
+          <div class="chart-wrap">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top services -->
+      <% if (topSvcs && topSvcs.length) { %>
+      <div class="card">
+        <div class="card-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>
+          Top Services — <span style="font-weight:400;color:var(--text2)"><%= selected.date %></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Service</th><th>Total</th><th>Errors</th><th>Warnings</th><th>Info</th><th>Error Rate</th><th>Volume</th></tr>
+            </thead>
+            <tbody>
+              <% var maxTotal = topSvcs[0] ? topSvcs[0].total : 1; %>
+              <% topSvcs.forEach(function(svc) { %>
+              <tr>
+                <td><a href="/logs?service=<%= svc.appName %>&date=<%= selected.date %>" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500"><%= svc.appName %></a></td>
+                <td><strong><%= svc.total.toLocaleString() %></strong></td>
+                <td><span class="badge badge-error"><%= svc.error %></span></td>
+                <td><span class="badge badge-warn"><%= svc.warn %></span></td>
+                <td><span class="badge badge-info"><%= svc.info %></span></td>
+                <td style="color:<%= svc.total && svc.error/svc.total > 0.1 ? 'var(--red)' : 'var(--text2)' %>">
+                  <%= svc.total ? (svc.error/svc.total*100).toFixed(1) : '0.0' %>%
+                </td>
+                <td style="min-width:120px;">
+                  <div class="progress-bar" style="margin-top:4px;">
+                    <div class="progress-fill <%= svc.error/svc.total > 0.1 ? 'red' : '' %>" style="width:<%= Math.round(svc.total/maxTotal*100) %>%"></div>
+                  </div>
+                </td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const isDark    = document.documentElement.dataset.theme !== 'light';
+const grid      = isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.06)';
+const tickColor = isDark ? '#5a5a78' : '#9494b8';
+
+const hourlyRaw  = <%- JSON.stringify(hourly  ? hourly.hours  : []) %>;
+const breakdownR = <%- JSON.stringify(breakdown || {error:0,warn:0,info:0,debug:0}) %>;
+const trendRaw   = <%- JSON.stringify(trend   || []) %>;
+
+// ── Hourly stacked bar ─────────────────────────────────────────────────────
+if (hourlyRaw.length) {
+  new Chart(document.getElementById('hourlyChart'), {
+    type: 'bar',
+    data: {
+      labels: hourlyRaw.map(h => h.hour + ':00'),
+      datasets: [
+        { label: 'Error', data: hourlyRaw.map(h => h.error), backgroundColor: 'rgba(239,68,68,.75)',  stack: 's' },
+        { label: 'Warn',  data: hourlyRaw.map(h => h.warn),  backgroundColor: 'rgba(245,158,11,.65)', stack: 's' },
+        { label: 'Info',  data: hourlyRaw.map(h => h.info),  backgroundColor: 'rgba(59,130,246,.6)',  stack: 's' },
+        { label: 'Debug', data: hourlyRaw.map(h => h.debug), backgroundColor: 'rgba(107,114,128,.4)', stack: 's' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { color: tickColor, font: { size: 11 }, boxWidth: 12 } } },
+      scales: {
+        x: { stacked: true, ticks: { color: tickColor, font: { size: 10 } }, grid: { color: grid } },
+        y: { stacked: true, ticks: { color: tickColor, font: { size: 10 } }, grid: { color: grid } }
+      }
+    }
+  });
+}
+
+// ── Level donut ────────────────────────────────────────────────────────────
+new Chart(document.getElementById('levelChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Error', 'Warn', 'Info', 'Debug'],
+    datasets: [{
+      data: [breakdownR.error, breakdownR.warn, breakdownR.info, breakdownR.debug],
+      backgroundColor: ['rgba(239,68,68,.85)','rgba(245,158,11,.85)','rgba(59,130,246,.85)','rgba(107,114,128,.75)'],
+      borderWidth: 2,
+      borderColor: isDark ? '#13131e' : '#fff',
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: 'right', labels: { color: tickColor, font: { size: 11 }, boxWidth: 12 } } },
+    cutout: '65%'
+  }
+});
+
+// ── 7-day trend line ───────────────────────────────────────────────────────
+if (trendRaw.length) {
+  new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+      labels: trendRaw.map(d => d.date.slice(5)),
+      datasets: [
+        { label: 'Total', data: trendRaw.map(d => d.total), borderColor: 'rgba(99,102,241,.9)', backgroundColor: 'rgba(99,102,241,.1)', tension: .3, fill: true, pointRadius: 3 },
+        { label: 'Error', data: trendRaw.map(d => d.error), borderColor: 'rgba(239,68,68,.8)',  backgroundColor: 'transparent', tension: .3, pointRadius: 3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: tickColor, font: { size: 11 }, boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { color: tickColor, font: { size: 10 } }, grid: { color: grid } },
+        y: { ticks: { color: tickColor, font: { size: 10 } }, grid: { color: grid }, beginAtZero: true }
+      }
+    }
+  });
+}
+</script>
+</body></html>

@@ -2,17 +2,28 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
 
+/** Authenticate via JWT cookie — populates req.user */
 function authenticate (req, res, next) {
 	const token = req.cookies[config.SESSION_NAME];
 	if (!token) { return res.status(401).json({ error: 'Unauthorized — no session' }); }
-
 	try {
-		const decoded = jwt.verify(token, config.JWT_SECRET);
-		req.user = decoded;
+		req.user = jwt.verify(token, config.JWT_SECRET);
 		next();
-	} catch (err) {
-		return res.status(401).json({ error: 'Unauthorized — invalid or expired token' });
+	} catch {
+		res.status(401).json({ error: 'Unauthorized — invalid or expired token' });
 	}
 }
 
-module.exports = authenticate;
+/** Redirect to /login if no valid session (for UI routes) */
+function authenticateUI (req, res, next) {
+	const token = req.cookies[config.SESSION_NAME];
+	if (!token) { return res.redirect('/login'); }
+	try {
+		req.user = jwt.verify(token, config.JWT_SECRET);
+		next();
+	} catch {
+		res.redirect('/login');
+	}
+}
+
+module.exports = { authenticate, authenticateUI };
