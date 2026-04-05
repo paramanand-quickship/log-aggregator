@@ -1,141 +1,121 @@
 'use strict';
-const fsP = require('fs').promises;
+const fsP    = require('fs').promises;
 const config = require('../config');
 
-// ── Catalogue ──────────────────────────────────────────────────────────────
-
 const ALL_PAGES = [
-	{ id: 'dashboard', label: 'Dashboard', lockFor: ['admin', 'viewer'] }, // always on
-	{ id: 'logs', label: 'Logs' },
-	{ id: 'live', label: 'Live Stream' },
-	{ id: 'analytics', label: 'Analytics' },
-	{ id: 'api-analytics', label: 'API Analytics' },
-	{ id: 'health', label: 'Health' },
-	{ id: 'settings', label: 'Settings', lockFor: ['admin'] }, // admin always has settings
-	{ id: 'roles', label: 'Role Config', lockFor: ['admin'] }, // admin always has roles
+  { id: 'dashboard',     label: 'Dashboard',       alwaysOn: true },
+  { id: 'logs',          label: 'Logs' },
+  { id: 'live',          label: 'Live Stream' },
+  { id: 'insights',      label: 'Insights' },
+  { id: 'health',        label: 'Health' },
+  { id: 'users',         label: 'User Management',  adminOnly: true },
+  { id: 'api-keys',      label: 'API Keys',          adminOnly: true },
+  { id: 'settings',      label: 'Settings',          adminOnly: true },
+  { id: 'roles',         label: 'Role Config',       adminOnly: true },
 ];
 
 const ALL_CARDS = [
-	{ id: 'stat-logs', label: 'Logs Today', section: 'Stats' },
-	{ id: 'stat-errors', label: 'Errors Today', section: 'Stats' },
-	{ id: 'stat-services', label: 'Services Count', section: 'Stats' },
-	{ id: 'stat-errorrate', label: 'Error Rate', section: 'Stats' },
-	{ id: 'chart-hourly', label: 'Hourly Volume', section: 'Charts' },
-	{ id: 'chart-services', label: 'Top Services', section: 'Charts' },
-	{ id: 'recent-errors', label: 'Recent Errors', section: 'Tables' },
+  { id: 'stat-logs',         label: 'Logs Today',          section: 'Dashboard Stats' },
+  { id: 'stat-errors',       label: 'Errors Today',        section: 'Dashboard Stats' },
+  { id: 'stat-services',     label: 'Services Count',      section: 'Dashboard Stats' },
+  { id: 'stat-errorrate',    label: 'Error Rate',          section: 'Dashboard Stats' },
+  { id: 'chart-hourly',      label: 'Hourly Volume',       section: 'Dashboard Charts' },
+  { id: 'chart-services',    label: 'Top Services',        section: 'Dashboard Charts' },
+  { id: 'recent-errors',     label: 'Recent Errors',       section: 'Dashboard Tables' },
+  { id: 'ins-stats',         label: 'Log Level Stats',     section: 'Insights - Logs' },
+  { id: 'ins-hourly',        label: 'Log Hourly Chart',    section: 'Insights - Logs' },
+  { id: 'ins-donut',         label: 'Level Distribution',  section: 'Insights - Logs' },
+  { id: 'ins-trend',         label: '7-Day Trend',         section: 'Insights - Logs' },
+  { id: 'ins-services',      label: 'Top Services Table',  section: 'Insights - Logs' },
+  { id: 'api-stats',         label: 'API Stat Cards',      section: 'Insights - API' },
+  { id: 'api-hourly',        label: 'API Hourly Chart',    section: 'Insights - API' },
+  { id: 'api-status',        label: 'Status Distribution', section: 'Insights - API' },
+  { id: 'api-slowest',       label: 'Slowest Endpoints',   section: 'Insights - API' },
+  { id: 'api-endpoints',     label: 'Endpoints Table',     section: 'Insights - API' },
+  { id: 'api-errors',        label: 'Error Hot-spots',     section: 'Insights - API' },
+  { id: 'api-trend',         label: 'Trend Analysis',      section: 'Insights - API' },
 ];
 
-const DEFAULTS = {
-	viewer: {
-		pages: ['dashboard', 'logs', 'live', 'analytics'],
-		cards: ['stat-logs', 'stat-errors', 'chart-hourly', 'recent-errors'],
-	},
-	admin: {
-		pages: [
-			'dashboard',
-			'logs',
-			'live',
-			'analytics',
-			'api-analytics',
-			'health',
-			'settings',
-			'roles',
-		],
-		cards: [
-			'stat-logs',
-			'stat-errors',
-			'stat-services',
-			'stat-errorrate',
-			'chart-hourly',
-			'chart-services',
-			'recent-errors',
-		],
-	},
+const BUILT_IN = {
+  admin: {
+    label: 'Administrator', color: '#6366f1', isBuiltIn: true,
+    pages: ALL_PAGES.map(p=>p.id),
+    cards: ALL_CARDS.map(c=>c.id),
+  },
+  viewer: {
+    label: 'Viewer', color: '#22c55e', isBuiltIn: true,
+    pages: ['dashboard','logs','live','insights'],
+    cards: ['stat-logs','stat-errors','chart-hourly','recent-errors','ins-stats','ins-hourly','ins-donut','ins-trend'],
+  },
 };
 
-// ── Service ────────────────────────────────────────────────────────────────
-
 class RoleConfigService {
-	// Expose catalogue so controllers/views can use it
-	static ALL_PAGES = ALL_PAGES;
-	static ALL_CARDS = ALL_CARDS;
+  static ALL_PAGES = ALL_PAGES;
+  static ALL_CARDS = ALL_CARDS;
 
-	async getConfig () {
-		try {
-			const raw = await fsP.readFile(
-				config.SETTINGS_FILE.replace('settings.json', 'role-config.json'),
-				'utf8',
-			);
-			return { ...DEFAULTS, ...JSON.parse(raw) };
-		} catch (err) {
-			if (err.code === 'ENOENT') {
-				return JSON.parse(JSON.stringify(DEFAULTS));
-			}
-			throw err;
-		}
-	}
+  async getRoles() {
+    try {
+      const file = JSON.parse(await fsP.readFile(config.ROLES_FILE,'utf8'));
+      // Merge built-ins with file (file can override built-in pages/cards)
+      const merged = { ...BUILT_IN };
+      for (const [name,def] of Object.entries(file)) {
+        merged[name] = { ...BUILT_IN[name], ...def };
+      }
+      return merged;
+    } catch(e) { if(e.code==='ENOENT') return {...BUILT_IN}; throw e; }
+  }
 
-	get _filePath () {
-		return config.SETTINGS_FILE.replace('settings.json', 'role-config.json');
-	}
+  async getRoleConfig(role) {
+    const roles = await this.getRoles();
+    return roles[role] || roles.viewer;
+  }
 
-	async getRoleConfig (role) {
-		const cfg = await this.getConfig();
-		return cfg[role] || cfg.viewer; // default to viewer perms if unknown role
-	}
+  async canAccessPage(role, pageId) {
+    if (pageId === 'dashboard') return true;
+    const cfg = await this.getRoleConfig(role);
+    return Array.isArray(cfg.pages) && cfg.pages.includes(pageId);
+  }
 
-	async canAccessPage (role, pageId) {
-		// Locked pages are always on for the specified roles
-		const page = ALL_PAGES.find((p) => p.id === pageId);
-		if (page?.lockFor?.includes(role)) {
-			return true;
-		}
+  async getAllowedPages(role) {
+    const cfg = await this.getRoleConfig(role);
+    const s = new Set(Array.isArray(cfg.pages)?cfg.pages:[]);
+    s.add('dashboard');
+    return [...s];
+  }
 
-		const rc = await this.getRoleConfig(role);
-		return Array.isArray(rc.pages) && rc.pages.includes(pageId);
-	}
+  async getAllowedCards(role) {
+    const cfg = await this.getRoleConfig(role);
+    return Array.isArray(cfg.cards) ? cfg.cards : [];
+  }
 
-	async getAllowedCards (role) {
-		const rc = await this.getRoleConfig(role);
-		return Array.isArray(rc.cards) ? rc.cards : ALL_CARDS.map((c) => c.id);
-	}
+  async saveRoles(roles) {
+    await fsP.writeFile(config.ROLES_FILE, JSON.stringify(roles,null,2),'utf8');
+    return roles;
+  }
 
-	async getAllowedPages (role) {
-		const rc = await this.getRoleConfig(role);
-		// merge locked pages
-		const locked = ALL_PAGES.filter((p) => p.lockFor?.includes(role)).map(
-			(p) => p.id,
-		);
-		const set = new Set([...(rc.pages || []), ...locked]);
-		return [...set];
-	}
+  async upsertRole(name, def) {
+    if (!name || !/^[a-zA-Z0-9_-]{2,32}$/.test(name))
+      throw Object.assign(new Error('Role name 2-32 chars alphanumeric/_-'), {status:400});
+    const roles = await this.getRoles();
+    roles[name] = {
+      label:     def.label || name,
+      color:     def.color || '#6b7280',
+      isBuiltIn: false,
+      pages:     Array.isArray(def.pages) ? def.pages : [],
+      cards:     Array.isArray(def.cards) ? def.cards : [],
+    };
+    await this.saveRoles(roles);
+    return roles[name];
+  }
 
-	async saveConfig (updates) {
-		const current = await this.getConfig();
-		const next = { ...current };
-
-		for (const [role, perms] of Object.entries(updates)) {
-			if (!next[role]) {
-				next[role] = { pages: [], cards: [] };
-			}
-
-			// Enforce locked pages
-			if (perms.pages !== undefined) {
-				const locked = ALL_PAGES.filter((p) => p.lockFor?.includes(role)).map(
-					(p) => p.id,
-				);
-				const merged = new Set([...perms.pages, ...locked]);
-				next[role].pages = [...merged];
-			}
-
-			if (perms.cards !== undefined) {
-				next[role].cards = perms.cards;
-			}
-		}
-
-		await fsP.writeFile(this._filePath, JSON.stringify(next, null, 2), 'utf8');
-		return next;
-	}
+  async deleteRole(name) {
+    if (name==='admin'||name==='viewer')
+      throw Object.assign(new Error('Cannot delete built-in roles'),{status:400});
+    const roles = await this.getRoles();
+    if (!roles[name]) throw Object.assign(new Error('Role not found'),{status:404});
+    delete roles[name];
+    await this.saveRoles(roles);
+  }
 }
 
 module.exports = { RoleConfigService, ALL_PAGES, ALL_CARDS };

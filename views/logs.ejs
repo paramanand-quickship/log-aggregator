@@ -1,4 +1,11 @@
 <%- include('partials/head', { title: 'Logs' }) %>
+<style>
+  .level-icon { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:4px; flex-shrink:0; }
+  .level-icon.error { background:rgba(239,68,68,.15); }
+  .level-icon.warn  { background:rgba(245,158,11,.15); }
+  .level-icon.info  { background:rgba(59,130,246,.15); }
+  .level-icon.debug { background:rgba(107,114,128,.15); }
+</style>
 <div class="app-shell">
   <%- include('partials/sidebar') %>
   <div class="main-area">
@@ -56,14 +63,31 @@
           </div>
         </form>
 
-        <!-- Quick filter chips -->
-        <div class="chip-bar" style="margin-top:10px;margin-bottom:0;">
-          <span style="font-size:11px;color:var(--text3);line-height:28px;">Quick:</span>
-          <% ['error','warn','info','debug'].forEach(function(lvl) { %>
-          <a href="/logs?service=<%= selected.service %>&date=<%= selected.date %>&level=<%= lvl %>" class="chip <%= lvl %> <%= selected.level===lvl?'active':'' %>">
-            <%= lvl.charAt(0).toUpperCase()+lvl.slice(1) %>
+        <!-- Quick filter chips with icons -->
+        <div class="chip-bar" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
+          <span style="font-size:11px;color:var(--text3);font-weight:500;margin-right:2px;">Quick:</span>
+          <a href="/logs?service=<%= selected.service %>&date=<%= selected.date %>&level=error" class="chip error <%= selected.level==='error'?'active':'' %>">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Error
           </a>
-          <% }) %>
+          <a href="/logs?service=<%= selected.service %>&date=<%= selected.date %>&level=warn" class="chip warn <%= selected.level==='warn'?'active':'' %>">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Warn
+          </a>
+          <a href="/logs?service=<%= selected.service %>&date=<%= selected.date %>&level=info" class="chip info <%= selected.level==='info'?'active':'' %>">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Info
+          </a>
+          <a href="/logs?service=<%= selected.service %>&date=<%= selected.date %>&level=debug" class="chip debug <%= selected.level==='debug'?'active':'' %>">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+            Debug
+          </a>
+          <% if (selected.level) { %>
+          <a href="/logs?service=<%= selected.service %>&date=<%= selected.date %>" class="chip" style="margin-left:4px;color:var(--text3);">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Clear filter
+          </a>
+          <% } %>
         </div>
       </div>
 
@@ -79,45 +103,64 @@
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <p>No logs found for <strong><%= selected.service %></strong> on <strong><%= selected.date %></strong></p>
           </div>
-        <% } else { %>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-            <div style="font-size:12px;color:var(--text2);">
-              Showing <strong style="color:var(--text)"><%= results.lines.length %></strong> lines
-              from <strong style="color:var(--text)"><%= selected.service %></strong> · <span style="font-family:'JetBrains Mono',monospace"><%= selected.date %></span>
+        <% } else {
+          // Pre-filter
+          var filteredLines = results.lines.filter(function(line) {
+            var parsed = null, level = 'info';
+            try { parsed = JSON.parse(line); level = (parsed.level||'info').toLowerCase(); } catch(e){}
+            if (selected.level && level !== selected.level) return false;
+            if (selected.q && line.toLowerCase().indexOf(selected.q.toLowerCase()) === -1) return false;
+            return true;
+          });
+        %>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div style="font-size:12px;color:var(--text2);">
+                Showing <strong style="color:var(--text)"><%= filteredLines.length %></strong>
+                <% if (filteredLines.length !== results.lines.length) { %>of <%= results.lines.length %><% } %>
+                lines from <strong style="color:var(--text)"><%= selected.service %></strong>
+              </div>
+              <!-- Inline level summary pills -->
+              <% var lvlCounts = {error:0,warn:0,info:0,debug:0}; filteredLines.forEach(function(l){try{var p=JSON.parse(l);lvlCounts[(p.level||'info').toLowerCase()]=(lvlCounts[(p.level||'info').toLowerCase()]||0)+1;}catch(e){}}) %>
+              <% if (lvlCounts.error > 0) { %><span class="badge badge-error" style="font-size:10px;"><%= lvlCounts.error %> error<% if(lvlCounts.error>1)%>s</span><% } %>
+              <% if (lvlCounts.warn > 0) { %><span class="badge badge-warn" style="font-size:10px;"><%= lvlCounts.warn %> warn</span><% } %>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);">
-              <label><input type="checkbox" id="wrap-toggle" onchange="toggleWrap(this)"/> Wrap text</label>
-            </div>
+            <label style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:5px;cursor:pointer;">
+              <input type="checkbox" id="wrap-toggle" onchange="toggleWrap(this)"/> Wrap text
+            </label>
           </div>
 
           <div class="log-list" id="log-list">
-            <% results.lines.forEach(function(line, idx) { %>
-              <%
-                var parsed = null, level = 'info', ts = '', msg = '';
-                try {
-                  parsed = JSON.parse(line);
-                  level  = (parsed.level || 'info').toLowerCase();
-                  ts     = parsed.ts ? parsed.ts.replace('T',' ').slice(0,19) : '';
-                  msg    = parsed.message || parsed.msg || line;
-                } catch(e) {
-                  msg = line;
-                }
-                // filter in EJS if level/q set
-                var show = true;
-                if (selected.level && level !== selected.level) show = false;
-                if (selected.q && line.toLowerCase().indexOf(selected.q.toLowerCase()) === -1) show = false;
-              %>
-              <% if (show) { %>
-              <div class="log-line level-<%= level %>" onclick="toggleLine(this)">
-                <span class="log-ts"><%= ts %></span>
-                <span class="badge badge-<%= level %>"><%= level %></span>
-                <span class="log-body" style="<% if (!selected.q) { %>white-space:nowrap;overflow:hidden;text-overflow:ellipsis;<% } %>"><%= msg %></span>
-                <% if (parsed && parsed.appName) { %><span style="font-size:11px;color:var(--text3);white-space:nowrap;font-family:'JetBrains Mono',monospace"><%= parsed.appName %></span><% } %>
-              </div>
-              <div class="log-expanded" style="display:none">
-                <pre class="log-json"><%= parsed ? JSON.stringify(parsed, null, 2) : line %></pre>
-              </div>
-              <% } %>
+            <% filteredLines.forEach(function(line, idx) {
+              var parsed = null, level = 'info', ts = '', msg = '', svc = '';
+              try {
+                parsed = JSON.parse(line);
+                level  = (parsed.level || 'info').toLowerCase();
+                ts     = parsed.ts ? parsed.ts.replace('T',' ').slice(0,19) : '';
+                msg    = parsed.message || parsed.msg || line;
+                svc    = parsed.appName || '';
+              } catch(e) { msg = line; }
+            %>
+            <div class="log-line level-<%= level %>" onclick="toggleLine(this)">
+              <span class="level-icon <%= level %>">
+                <% if (level === 'error') { %>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <% } else if (level === 'warn') { %>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <% } else if (level === 'info') { %>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <% } else { %>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>
+                <% } %>
+              </span>
+              <span class="log-ts"><%= ts %></span>
+              <span class="log-body" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><%= msg %></span>
+              <% if (svc) { %><span style="font-size:10px;color:var(--text3);white-space:nowrap;font-family:'JetBrains Mono',monospace;padding:1px 6px;background:var(--surface2);border-radius:3px;"><%= svc %></span><% } %>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="expand-icon" style="flex-shrink:0;color:var(--text3);transition:transform .15s;"><polyline points="6,9 12,15 18,9"/></svg>
+            </div>
+            <div class="log-expanded" style="display:none">
+              <pre class="log-json"><%= parsed ? JSON.stringify(parsed, null, 2) : line %></pre>
+            </div>
             <% }) %>
           </div>
         <% } %>
@@ -133,19 +176,18 @@ function toggleLine(el) {
   const open = next.style.display === '';
   next.style.display = open ? 'none' : '';
   el.classList.toggle('expanded', !open);
+  const icon = el.querySelector('.expand-icon');
+  if (icon) icon.style.transform = open ? '' : 'rotate(180deg)';
 }
 function toggleWrap(cb) {
   document.querySelectorAll('.log-body').forEach(el => {
     el.style.whiteSpace = cb.checked ? 'pre-wrap' : 'nowrap';
     el.style.overflow   = cb.checked ? 'visible'  : 'hidden';
+    el.style.textOverflow = cb.checked ? 'clip' : 'ellipsis';
   });
 }
-// Keyboard shortcuts
 document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-    e.preventDefault();
-    document.querySelector('[name="q"]').focus();
-  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); document.querySelector('[name="q"]').focus(); }
 });
 </script>
 </body></html>

@@ -151,6 +151,10 @@
             API Key
           </a>
           <% } %>
+          <a class="settings-nav-item" href="#ipwhitelist" onclick="navClick(this)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            IP Whitelist
+          </a>
           <a class="settings-nav-item" href="#appearance" onclick="navClick(this)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
             Appearance
@@ -419,6 +423,30 @@
           </div>
           <% } %>
 
+
+          <!-- ═══════════════════════════════ IP WHITELIST ══ -->
+          <% if (isAdmin) { %>
+          <div class="card settings-section" id="ipwhitelist">
+            <div class="section-header">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              IP Whitelist
+              <span style="font-size:10px;font-weight:600;background:rgba(245,158,11,.12);color:var(--yellow);border:1px solid rgba(245,158,11,.25);padding:1px 6px;border-radius:4px;">Admin</span>
+            </div>
+            <div style="max-width:500px;display:flex;flex-direction:column;gap:12px;">
+              <div style="font-size:12px;color:var(--text2);line-height:1.7;">
+                Restrict log ingest (<code style="font-family:'JetBrains Mono',monospace;background:var(--surface3);padding:1px 5px;border-radius:3px;">POST /api/logs</code>) to specific IPs.
+                Leave empty to allow all. Supports exact IPs and <code style="font-family:'JetBrains Mono',monospace;background:var(--surface3);padding:1px 5px;border-radius:3px;">/24</code> prefixes (e.g. <code style="font-family:'JetBrains Mono',monospace;background:var(--surface3);padding:1px 5px;border-radius:3px;">192.168.1.0/24</code>).
+              </div>
+              <div>
+                <label class="form-label">Allowed IPs (one per line)</label>
+                <textarea id="ip-whitelist" class="form-input" rows="5" placeholder="192.168.1.100&#10;10.0.0.0/24&#10;(empty = allow all)" style="font-family:'JetBrains Mono',monospace;font-size:12px;resize:vertical;"><%= settings.ipWhitelist ? settings.ipWhitelist.join('\n') : '' %></textarea>
+              </div>
+              <div>
+                <button class="btn btn-primary btn-sm" onclick="saveIPWhitelist()">Save Whitelist</button>
+              </div>
+            </div>
+          </div>
+          <% } %>
           <!-- ═══════════════════════════════ APPEARANCE ═══ -->
           <div class="card settings-section" id="appearance">
             <div class="section-header">
@@ -787,5 +815,15 @@ document.getElementById('twofa-modal').addEventListener('click', function(e) {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') close2faModal();
 });
+async function saveIPWhitelist() {
+  const raw = document.getElementById('ip-whitelist')?.value || '';
+  const ipWhitelist = raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  try {
+    const r = await fetch('/api/settings', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ipWhitelist}) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error);
+    toast('IP whitelist saved', 'success');
+  } catch(e) { toast(e.message, 'error'); }
+}
 </script>
 </body></html>

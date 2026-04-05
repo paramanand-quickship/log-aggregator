@@ -1,0 +1,13 @@
+'use strict';
+const {Router}=require('express');
+const UserController=require('../controllers/UserController');
+const {authenticate}=require('../middleware/auth');
+const requireRole=require('../middleware/roles');
+const router=Router(), ctrl=new UserController(), admin=[authenticate,requireRole('admin')];
+router.get ('/',                        ...admin,(req,res)=>ctrl.list(req,res));
+router.post('/',                        ...admin,(req,res)=>ctrl.create(req,res));
+router.put ('/:username/role',          ...admin,(req,res)=>ctrl.updateRole(req,res));
+router.put ('/:username/reset-password',...admin,(req,res)=>ctrl.resetPassword(req,res));
+router.delete('/:username',             ...admin,(req,res)=>ctrl.remove(req,res));
+router.delete('/:username/2fa',         ...admin,(req,res)=>ctrl.revoke2fa(req,res));
+module.exports=router;

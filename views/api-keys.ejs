@@ -1,0 +1,143 @@
+<%- include('partials/head', { title: 'API Keys' }) %>
+<div class="app-shell">
+  <%- include('partials/sidebar') %>
+  <div class="main-area">
+    <header class="top-header">
+      <div class="page-title">API Keys</div>
+      <div class="header-actions">
+        <button class="btn btn-primary btn-sm" onclick="openCreateModal()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Key
+        </button>
+      </div>
+    </header>
+    <div class="page-content">
+      <div class="card" style="margin-bottom:12px;padding:12px 16px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);">
+        <div style="display:flex;gap:10px;align-items:flex-start;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div style="font-size:12px;color:var(--text2);line-height:1.7;">API keys use a <code style="font-family:'JetBrains Mono',monospace;background:var(--surface3);padding:1px 5px;border-radius:3px;">blq_</code> prefix and are stored as SHA-256 hashes. The raw key is shown <strong>once</strong> on creation — copy it immediately. Use via <code style="font-family:'JetBrains Mono',monospace;background:var(--surface3);padding:1px 5px;border-radius:3px;">X-Api-Key: blq_...</code> header.</div>
+        </div>
+      </div>
+      <div class="card">
+        <% if(!keys||!keys.length){ %>
+        <div class="empty-state" style="padding:40px 0;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          <p style="margin-top:12px;">No API keys yet. Create one to start ingesting logs.</p>
+        </div>
+        <% }else{ %>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name</th><th>Key Prefix</th><th>Scopes</th><th>Expires</th><th>Last Used</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="keys-tbody">
+              <% keys.forEach(function(k){ %>
+              <tr id="key-row-<%=k.id%>" style="<%=!k.active?'opacity:.5;':''%>">
+                <td style="font-weight:600;color:var(--text);"><%=k.name%></td>
+                <td><code style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-l);"><%=k.keyPrefix%></code></td>
+                <td><div style="display:flex;gap:4px;flex-wrap:wrap;"><%=(k.scopes||[]).map(s=>'<span class="badge badge-info" style="font-size:9px;">'+s+'</span>').join('')%></div></td>
+                <td style="font-size:12px;color:var(--text3);"><%=k.expiresAt?new Date(k.expiresAt).toLocaleDateString():'Never'%></td>
+                <td style="font-size:11px;color:var(--text3);"><%=k.lastUsedAt?new Date(k.lastUsedAt).toLocaleString():'Never'%></td>
+                <td><span class="badge <%=k.active?'badge-green':'badge-debug'%>"><%=k.active?'active':'revoked'%></span></td>
+                <td>
+                  <div style="display:flex;gap:6px;">
+                    <% if(k.active){ %><button class="btn btn-danger btn-xs" onclick="revokeKey('<%=k.id%>')">Revoke</button><% } %>
+                    <button class="btn btn-secondary btn-xs" onclick="deleteKey('<%=k.id%>')">Delete</button>
+                  </div>
+                </td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Key Modal -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal-box">
+    <div class="modal-title">Create API Key</div>
+    <div class="modal-sub">Keys are shown only once. Store the raw key securely.</div>
+    <div class="form-group"><label class="form-label">Key Name</label><input type="text" id="key-name" class="form-input" placeholder="e.g. production-server"/></div>
+    <div class="form-group">
+      <label class="form-label">Scopes</label>
+      <div class="scope-grid" id="scope-grid">
+        <% SCOPES.forEach(function(s){ %>
+        <label class="scope-pill <%=s==='logs:write'?'checked':''%>" onclick="toggleScope(this)">
+          <input type="checkbox" value="<%=s%>" <%=s==='logs:write'?'checked':''%>/><%=s%>
+        </label>
+        <% }) %>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Expires At <span style="color:var(--text3);font-weight:400">(optional)</span></label><input type="date" id="key-expires" class="form-input"/></div>
+    <div id="create-err" style="display:none;color:var(--red);font-size:12px;margin-bottom:12px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="createKey()">Create Key</button>
+      <button class="btn btn-secondary" onclick="closeModal('create-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Key reveal Modal -->
+<div class="modal-overlay" id="reveal-modal">
+  <div class="modal-box">
+    <div class="modal-title">✅ Key Created — Copy Now</div>
+    <div class="modal-sub" style="color:var(--red);font-weight:500;">This key will NOT be shown again.</div>
+    <div style="margin:16px 0;background:var(--surface3);border-radius:8px;padding:14px;border:1px solid var(--border);">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--accent-l);word-break:break-all;margin-bottom:10px;" id="raw-key-display"></div>
+      <button class="btn btn-secondary btn-sm" onclick="copyRawKey()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy Key
+      </button>
+    </div>
+    <button class="btn btn-primary w-full" style="width:100%;justify-content:center;" onclick="closeModal('reveal-modal');location.reload()">Done — I've copied it</button>
+  </div>
+</div>
+
+<script>
+let _rawKey='';
+function toggleScope(label){label.classList.toggle('checked');label.querySelector('input').checked=label.classList.contains('checked');}
+function openCreateModal(){document.getElementById('key-name').value='';document.getElementById('key-expires').value='';document.getElementById('create-err').style.display='none';document.getElementById('create-modal').classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open'));});
+
+async function createKey(){
+  const name=document.getElementById('key-name').value.trim();
+  const scopes=[...document.querySelectorAll('#scope-grid input:checked')].map(i=>i.value);
+  const exp=document.getElementById('key-expires').value||null;
+  const errEl=document.getElementById('create-err');errEl.style.display='none';
+  if(!name){errEl.textContent='Key name required';errEl.style.display='';return;}
+  if(!scopes.length){errEl.textContent='Select at least one scope';errEl.style.display='';return;}
+  try{
+    const r=await fetch('/api/api-keys',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,scopes,expiresAt:exp})});
+    const d=await r.json();
+    if(!r.ok){errEl.textContent=d.error;errEl.style.display='';return;}
+    _rawKey=d.key;
+    document.getElementById('raw-key-display').textContent=d.key;
+    closeModal('create-modal');
+    document.getElementById('reveal-modal').classList.add('open');
+  }catch(e){errEl.textContent='Network error';errEl.style.display='';}
+}
+
+function copyRawKey(){navigator.clipboard.writeText(_rawKey).then(()=>toast('Key copied!','success'));}
+
+async function revokeKey(id){
+  if(!confirm('Revoke this key? It will stop working immediately.'))return;
+  const r=await fetch('/api/api-keys/'+id+'/revoke',{method:'POST'});
+  const d=await r.json();
+  if(!r.ok){toast(d.error,'error');return;}
+  toast('Key revoked','success');location.reload();
+}
+
+async function deleteKey(id){
+  if(!confirm('Permanently delete this key?'))return;
+  const r=await fetch('/api/api-keys/'+id,{method:'DELETE'});
+  const d=await r.json();
+  if(!r.ok){toast(d.error,'error');return;}
+  toast('Key deleted','success');
+  const row=document.getElementById('key-row-'+id);if(row)row.remove();
+}
+</script>
+</body></html>

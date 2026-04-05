@@ -9,48 +9,36 @@ class UiController {
     this.analytics = analyticsService;
   }
 
-  // ── Shared render props (allowedPages for sidebar, allowedCards for dashboard) ──
-  async _base (req, extra = {}) {
+  // ── Base props: allowedPages + allowedCards injected into every render ───
+  async _base(req, extra={}) {
     try {
       const { RoleConfigService } = require('../services/RoleConfigService');
-      const rc           = new RoleConfigService();
-      const role         = req.user?.role || 'viewer';
-      const allowedPages = await rc.getAllowedPages(role);
-      const allowedCards = await rc.getAllowedCards(role);
+      const rc = new RoleConfigService();
+      const role = req.user?.role || 'viewer';
+      const [allowedPages, allowedCards] = await Promise.all([
+        rc.getAllowedPages(role),
+        rc.getAllowedCards(role),
+      ]);
       return { user: req.user, allowedPages, allowedCards, ...extra };
     } catch {
       return { user: req.user, allowedPages: null, allowedCards: [], ...extra };
     }
   }
 
-  loginPage(req, res) {
-    res.render('login', { title: 'Login', error: null });
-  }
+  loginPage(req, res) { res.render('login', { title: 'Login', error: null }); }
 
   async dashboard(req, res) {
     try {
-      const overview = await this.analytics.getOverview();
-      const hourly   = await this.analytics.getHourlyVolume(null, getToday());
-      const errors   = await this.analytics.getRecentErrors(10);
-      const baseProps = await this._base(req);
-      res.render('dashboard', {
-        ...baseProps,
-        title:    'Dashboard',
-        overview,
-        hourly,
-        errors,
-        today:    getToday(),
-      });
-    } catch (err) {
-      const bp2 = await this._base(req, {
-        title: 'Dashboard',
-        overview: null,
-        hourly: null,
-        errors: [],
-        today: getToday(),
-        renderError: err.message,
-      });
-      res.render('dashboard', bp2);
+      const [overview, hourly, errors] = await Promise.all([
+        this.analytics.getOverview(),
+        this.analytics.getHourlyVolume(null, getToday()),
+        this.analytics.getRecentErrors(10),
+      ]);
+      const bp = await this._base(req);
+      res.render('dashboard', { ...bp, title:'Dashboard', overview, hourly, errors, today:getToday() });
+    } catch(err) {
+      const bp = await this._base(req);
+      res.render('dashboard', { ...bp, title:'Dashboard', overview:null, hourly:null, errors:[], today:getToday(), renderError:err.message });
     }
   }
 
@@ -58,195 +46,109 @@ class UiController {
     try {
       const services = await this.logs.getServices();
       const { service, date, level, q } = req.query;
-      let results = null;
-      if (service && date) {
-        results = await this.logs.tail(service, date, 200);
-      }
-      const ap = await this._base(req);
-      res.render('logs', { ...ap,
-        title:    'Logs',
-        services,
-        selected: { service: service || '', date: date || getToday(), level: level || '', q: q || '' },
-        results,
-        today:    getToday(),
-      });
-    } catch (err) {
-      res.render('logs', { ...(await this._base(req)), title: 'Logs', services: [], selected: {}, results: null, today: getToday(), renderError: err.message });
+      const results = (service && date) ? await this.logs.tail(service, date, 200) : null;
+      const bp = await this._base(req);
+      res.render('logs', { ...bp, title:'Logs', services, selected:{service:service||'',date:date||getToday(),level:level||'',q:q||''}, results, today:getToday() });
+    } catch(err) {
+      const bp = await this._base(req);
+      res.render('logs', { ...bp, title:'Logs', services:[], selected:{}, results:null, today:getToday(), renderError:err.message });
     }
   }
 
   async livePage(req, res) {
     try {
       const services = await this.logs.getServices();
-      res.render('live', { ...(await this._base(req)), title: 'Live Stream', services });
+      const bp = await this._base(req);
+      res.render('live', { ...bp, title:'Live Stream', services });
     } catch {
-      res.render('live', { ...(await this._base(req)), title: 'Live Stream', services: [] });
+      const bp = await this._base(req);
+      res.render('live', { ...bp, title:'Live Stream', services:[] });
     }
   }
 
-  async analyticsPage(req, res) {
+  async insightsPage(req, res) {
     try {
-      const services   = await this.logs.getServices();
       const { service, date } = req.query;
-      const today      = getToday();
-      const selDate    = date || today;
-      const hourly     = await this.analytics.getHourlyVolume(service || null, selDate);
-      const breakdown  = await this.analytics.getLevelBreakdown(service || null, selDate);
-      const topSvcs    = await this.analytics.getTopServices(selDate, 10);
-      const trend      = await this.analytics.getDailyTrend(service || null, 7);
-      const aap = await this._base(req);
-      res.render('analytics', { ...aap,
-        title: 'Analytics',
-        services,
-        selected: { service: service || '', date: selDate },
-        hourly,
-        breakdown,
-        topSvcs,
-        trend,
-        today,
-      });
-    } catch (err) {
-      res.render('analytics', { ...(await this._base(req)), title: 'Analytics', services: [], selected: {}, hourly: null, breakdown: null, topSvcs: [], trend: [], today: getToday(), renderError: err.message });
+      const today   = getToday();
+      const selDate = date || today;
+      const ApiAnalyticsService = require('../services/ApiAnalyticsService');
+      const [logServices, apiServicesList, hourly, breakdown, topSvcs, trend] = await Promise.all([
+        this.logs.getServices(),
+        new ApiAnalyticsService().getApiServices().catch(()=>[]),
+        this.analytics.getHourlyVolume(service||null, selDate),
+        this.analytics.getLevelBreakdown(service||null, selDate),
+        this.analytics.getTopServices(selDate, 10),
+        this.analytics.getDailyTrend(service||null, 7),
+      ]);
+      const bp = await this._base(req);
+      res.render('insights', { ...bp, title:'Insights', logServices, apiServices:apiServicesList, selected:{service:service||'',date:selDate}, hourly, breakdown, topSvcs, trend, today });
+    } catch(err) {
+      const bp = await this._base(req);
+      res.render('insights', { ...bp, title:'Insights', logServices:[], apiServices:[], selected:{}, hourly:null, breakdown:null, topSvcs:[], trend:[], today:getToday(), renderError:err.message });
     }
   }
-
-  // ── Health page ─────────────────────────────────────────────────────────
 
   async healthPage(req, res) {
     try {
-      const mem    = process.memoryUsage();
-      const cpu    = process.cpuUsage();
-      const upSec  = Math.floor(process.uptime());
-      const h      = Math.floor(upSec / 3600);
-      const m      = Math.floor((upSec % 3600) / 60);
-      const s      = upSec % 60;
-
-      let logDirOk = true;
-      try { await fsP.access(config.LOG_BASE_DIR); } catch { logDirOk = false; }
-
-      let overview = null;
-      try { overview = await this.analytics.getOverview(); } catch { /* non-fatal */ }
-
-      const status = logDirOk ? 'ok' : 'degraded';
-
-      const hp = await this._base(req);
-      res.render('health', { ...hp,
-        title: 'Health',
-        status,
-        timestamp:   new Date().toISOString(),
-        uptimeHuman: `${h}h ${m}m ${s}s`,
-        uptimeSec:   upSec,
-        memory: {
-          rss:       Math.round(mem.rss       / 1024 / 1024),
-          heapUsed:  Math.round(mem.heapUsed  / 1024 / 1024),
-          heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
-          external:  Math.round((mem.external || 0) / 1024 / 1024),
-        },
-        cpu: {
-          user:   (cpu.user   / 1e6).toFixed(3),
-          system: (cpu.system / 1e6).toFixed(3),
-          total:  ((cpu.user + cpu.system) / 1e6).toFixed(3),
-        },
-        proc: {
-          version:  process.version,
-          pid:      process.pid,
-          platform: process.platform,
-          arch:     process.arch,
-          cwd:      process.cwd(),
-          env:      config.NODE_ENV,
-        },
-        checks: {
-          logDir: logDirOk ? 'ok' : 'missing',
-          stream: config.ENABLE_STREAM ? 'enabled' : 'disabled',
-        },
-        cfg: {
-          port:          config.PORT,
-          logBaseDir:    config.LOG_BASE_DIR,
-          retentionDays: config.RETENTION_DAYS,
-          batchSize:     config.BATCH_SIZE,
-          batchTimeout:  config.BATCH_TIMEOUT,
-          maxBodySize:   config.MAX_BODY_SIZE,
-          enableStream:  config.ENABLE_STREAM,
-          corsOrigins:   config.CORS_ORIGINS,
-          webhookUrl:    config.WEBHOOK_URL ? '(configured)' : '(not set)',
-        },
+      const mem  = process.memoryUsage();
+      const cpu  = process.cpuUsage();
+      const upSec = Math.floor(process.uptime());
+      let logDirOk=true; try{await fsP.access(config.LOG_BASE_DIR);}catch{logDirOk=false;}
+      let overview=null; try{overview=await this.analytics.getOverview();}catch{}
+      const bp = await this._base(req);
+      res.render('health', { ...bp, title:'Health',
+        status: logDirOk?'ok':'degraded',
+        timestamp: new Date().toISOString(),
+        uptimeHuman: Math.floor(upSec/3600)+'h '+Math.floor((upSec%3600)/60)+'m '+(upSec%60)+'s',
+        uptimeSec: upSec,
+        memory: { rss:Math.round(mem.rss/1048576), heapUsed:Math.round(mem.heapUsed/1048576), heapTotal:Math.round(mem.heapTotal/1048576), external:Math.round((mem.external||0)/1048576) },
+        cpu: { user:(cpu.user/1e6).toFixed(3), system:(cpu.system/1e6).toFixed(3) },
+        proc: { version:process.version, pid:process.pid, platform:process.platform, arch:process.arch, cwd:process.cwd(), env:config.NODE_ENV },
+        checks: { logDir:logDirOk?'ok':'missing', stream:config.ENABLE_STREAM?'enabled':'disabled' },
+        cfg: { port:config.PORT, logBaseDir:config.LOG_BASE_DIR, dataDir:config.DATA_DIR, retentionDays:config.RETENTION_DAYS, batchSize:config.BATCH_SIZE, batchTimeout:config.BATCH_TIMEOUT, maxBodySize:config.MAX_BODY_SIZE, enableStream:config.ENABLE_STREAM, corsOrigins:config.CORS_ORIGINS, webhookUrl:config.WEBHOOK_URL?'(configured)':'(not set)' },
         overview,
       });
-    } catch (err) {
-      res.status(500).render('404', { title: 'Error', user: req.user || null });
-    }
+    } catch(err) { res.status(500).render('404',{title:'Error',user:req.user||null}); }
   }
-
-  // ── Settings page ────────────────────────────────────────────────────────
 
   async settingsPage(req, res) {
     try {
       const SettingsService = require('../services/SettingsService');
       const AuthService     = require('../services/AuthService');
-      const svc     = new SettingsService();
-      const authSvc = new AuthService();
-      const [settings, totpStatus] = await Promise.all([
-        svc.get(),
-        authSvc.getTotpStatus(req.user.username),
-      ]);
-      const sp = await this._base(req);
-      res.render('settings', { ...sp,
-        title: 'Settings',
-        isAdmin:    req.user.role === 'admin',
-        settings,
-        totpEnabled: totpStatus.enabled,
-      });
-    } catch (err) {
-      res.status(500).render('404', { title: 'Error', user: req.user || null });
-    }
+      const [settings, totpStatus] = await Promise.all([new SettingsService().get(), new AuthService().getTotpStatus(req.user.username)]);
+      const bp = await this._base(req);
+      res.render('settings', { ...bp, title:'Settings', isAdmin:req.user.role==='admin', settings, totpEnabled:totpStatus.enabled });
+    } catch(err) { res.status(500).render('404',{title:'Error',user:req.user||null}); }
   }
 
-  // ── API Analytics page ──────────────────────────────────────────────────
-
-  async apiAnalyticsPage(req, res) {
+  async usersPage(req, res) {
     try {
-      const ApiAnalyticsService = require('../services/ApiAnalyticsService');
-      const svc      = new ApiAnalyticsService();
-      const services = await svc.getApiServices();
-      const { service, date } = req.query;
-      const today    = require('../lib/utils').getToday();
-      const selSvc   = service || (services[0]?.appName || '');
-      const selDate  = date || today;
-      const aap2 = await this._base(req);
-      res.render('api-analytics', { ...aap2,
-        title: 'API Analytics',
-        services,
-        today,
-        selected: { service: selSvc, date: selDate },
-      });
-    } catch (err) {
-      res.status(500).render('404', { title: 'Error', user: req.user || null });
-    }
+      const UserService = require('../services/UserService');
+      const { RoleConfigService } = require('../services/RoleConfigService');
+      const [users, rolesData] = await Promise.all([new UserService().getAll(), new RoleConfigService().getRoles()]);
+      const bp = await this._base(req);
+      res.render('users', { ...bp, title:'Users', users, roles:Object.keys(rolesData), rolesData });
+    } catch(err) { res.status(500).render('404',{title:'Error',user:req.user||null}); }
   }
 
-  // ── Roles config page ────────────────────────────────────────────────────
+  async apiKeysPage(req, res) {
+    try {
+      const ApiKeyService = require('../services/ApiKeyService');
+      const keys = await new ApiKeyService().list();
+      const bp   = await this._base(req);
+      const SCOPES = ['logs:write','logs:read','analytics:read','health:read','stream:read'];
+      res.render('api-keys', { ...bp, title:'API Keys', keys, SCOPES });
+    } catch(err) { res.status(500).render('404',{title:'Error',user:req.user||null}); }
+  }
 
   async rolesPage(req, res) {
     try {
       const { RoleConfigService, ALL_PAGES, ALL_CARDS } = require('../services/RoleConfigService');
       const rcSvc = new RoleConfigService();
-      const [cfg, users] = await Promise.all([
-        rcSvc.getConfig(),
-        require('../lib/userStore').getUsers(),
-      ]);
-      const roles = [...new Set(Object.values(users).map(u => u.role || 'viewer'))].sort();
-      const bp    = await this._base(req);
-      res.render('roles', { ...bp,
-        title:    'Role Config',
-        roles,
-        config:   cfg,
-        allPages: ALL_PAGES,
-        allCards: ALL_CARDS,
-      });
-    } catch (err) {
-      res.status(500).render('404', { title: 'Error', user: req.user || null });
-    }
+      const rolesData = await rcSvc.getRoles();
+      const bp = await this._base(req);
+      res.render('roles', { ...bp, title:'Role Config', rolesData, allPages:ALL_PAGES, allCards:ALL_CARDS });
+    } catch(err) { res.status(500).render('404',{title:'Error',user:req.user||null}); }
   }
 }
-
 module.exports = UiController;

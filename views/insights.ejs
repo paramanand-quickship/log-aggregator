@@ -1,0 +1,284 @@
+<%- include('partials/head', { title: 'Insights' }) %>
+<style>
+  .tab-bar{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px;}
+  .tab-btn{padding:10px 20px;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--text2);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:7px;}
+  .tab-btn:hover{color:var(--text);}
+  .tab-btn.active{color:var(--accent-l);border-bottom-color:var(--accent);}
+  .tab-panel{display:none;}.tab-panel.active{display:block;}
+  .method-badge{display:inline-flex;align-items:center;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;font-family:'JetBrains Mono',monospace;white-space:nowrap;}
+  .method-GET{background:rgba(34,197,94,.15);color:var(--green);}
+  .method-POST{background:rgba(59,130,246,.15);color:var(--blue);}
+  .method-PUT{background:rgba(245,158,11,.15);color:var(--yellow);}
+  .method-DELETE{background:rgba(239,68,68,.15);color:var(--red);}
+  .method-PATCH{background:rgba(99,102,241,.15);color:var(--accent-l);}
+  .dur-pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:600;}
+  .dur-ok{background:rgba(34,197,94,.12);color:var(--green);}
+  .dur-med{background:rgba(245,158,11,.12);color:var(--yellow);}
+  .dur-slow{background:rgba(239,68,68,.12);color:var(--red);}
+  .sort-btn{background:none;border:none;color:var(--text3);cursor:pointer;padding:0 4px;font-size:11px;}
+  .sort-btn.asc::after{content:' ↑';}.sort-btn.desc::after{content:' ↓';}
+</style>
+<div class="app-shell">
+  <%- include('partials/sidebar') %>
+  <div class="main-area">
+    <header class="top-header">
+      <div class="page-title">Insights</div>
+      <div class="header-actions">
+        <span id="api-ctrl" style="display:none;gap:8px;align-items:center;">
+          <select id="svc-select" class="form-select" style="max-width:200px;" onchange="apiLoadAll()"></select>
+          <input type="date" id="api-date" class="form-input" style="max-width:140px;" value="<%= today %>" max="<%= today %>" onchange="apiLoadAll()"/>
+          <button class="btn btn-secondary btn-sm" onclick="apiLoadAll()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Refresh
+          </button>
+        </span>
+      </div>
+    </header>
+    <div class="page-content">
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-log" onclick="switchTab('log')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Log Analytics
+        </button>
+        <button class="tab-btn" id="tab-api" onclick="switchTab('api')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+          API Analytics
+          <% if(apiServices&&apiServices.length){%><span class="badge badge-purple" style="font-size:9px;padding:1px 5px;"><%=apiServices.length%></span><%}%>
+        </button>
+      </div>
+
+      <!-- ── LOG ANALYTICS ──────────────────────────────────────── -->
+      <div class="tab-panel active" id="panel-log">
+        <div class="card" style="margin-bottom:12px;">
+          <form method="GET" action="/insights">
+            <input type="hidden" name="tab" value="log"/>
+            <div class="form-row">
+              <div class="form-group" style="min-width:180px;flex:1.5">
+                <label class="form-label">Service</label>
+                <select name="service" class="form-select" onchange="this.form.submit()">
+                  <option value="">All Services</option>
+                  <% logServices.forEach(function(s){%><option value="<%=s.appName%>" <%=selected.service===s.appName?'selected':''%>><%=s.appName%></option><%})%>
+                </select>
+              </div>
+              <div class="form-group" style="min-width:150px;">
+                <label class="form-label">Date</label>
+                <input type="date" name="date" class="form-input" value="<%=selected.date%>" max="<%=today%>" onchange="this.form.submit()"/>
+              </div>
+              <div class="form-group" style="display:flex;align-items:flex-end;">
+                <button type="submit" class="btn btn-primary">Apply</button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <% if(hasCard('ins-stats')&&breakdown){%>
+        <div class="stats-grid" style="margin-bottom:12px;">
+          <div class="stat-card"><div class="stat-icon blue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div><div class="stat-value"><%=breakdown.total.toLocaleString()%></div><div class="stat-label">Total Logs</div><div class="stat-sub"><%=selected.date%></div></div></div>
+          <div class="stat-card"><div class="stat-icon red"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div><div class="stat-value"><%=breakdown.error.toLocaleString()%></div><div class="stat-label">Errors</div><div class="stat-sub"><%=breakdown.total?((breakdown.error/breakdown.total*100).toFixed(1))+'%':'0%'%> of total</div></div></div>
+          <div class="stat-card"><div class="stat-icon yellow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div><div class="stat-value"><%=breakdown.warn.toLocaleString()%></div><div class="stat-label">Warnings</div><div class="stat-sub"><%=breakdown.total?((breakdown.warn/breakdown.total*100).toFixed(1))+'%':'0%'%></div></div></div>
+          <div class="stat-card"><div class="stat-icon green"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg></div><div><div class="stat-value"><%=breakdown.info.toLocaleString()%></div><div class="stat-label">Info</div><div class="stat-sub"><%=breakdown.debug%> debug</div></div></div>
+        </div>
+        <%}%>
+
+        <div class="grid-2" style="margin-bottom:12px;">
+          <% if(hasCard('ins-hourly')){%>
+          <div class="card span-2">
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Log Volume by Hour<span style="margin-left:auto;font-size:11px;color:var(--text3);font-weight:400"><%=selected.date%> · <%=selected.service||'all services'%></span></div>
+            <div class="chart-wrap-lg"><canvas id="hourlyChart"></canvas></div>
+          </div>
+          <%}%>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:12px;">
+          <% if(hasCard('ins-donut')){%>
+          <div class="card">
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>Level Distribution</div>
+            <div class="chart-wrap"><canvas id="levelChart"></canvas></div>
+          </div>
+          <%}%>
+          <% if(hasCard('ins-trend')){%>
+          <div class="card">
+            <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>7-Day Trend</div>
+            <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+          </div>
+          <%}%>
+        </div>
+
+        <% if(hasCard('ins-services')&&topSvcs&&topSvcs.length){%>
+        <div class="card">
+          <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>Top Services — <span style="font-weight:400;color:var(--text2)"><%=selected.date%></span></div>
+          <div class="table-wrap">
+            <table><thead><tr><th>Service</th><th>Total</th><th>Errors</th><th>Warnings</th><th>Info</th><th>Error Rate</th><th>Volume</th></tr></thead>
+            <tbody><%var mx=topSvcs[0]?topSvcs[0].total:1;topSvcs.forEach(function(s){%>
+            <tr><td><a href="/insights?service=<%=s.appName%>&date=<%=selected.date%>&tab=log" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500"><%=s.appName%></a></td>
+            <td><strong><%=s.total.toLocaleString()%></strong></td>
+            <td><span class="badge badge-error"><%=s.error%></span></td>
+            <td><span class="badge badge-warn"><%=s.warn%></span></td>
+            <td><span class="badge badge-info"><%=s.info%></span></td>
+            <td style="color:<%=s.total&&s.error/s.total>0.1?'var(--red)':'var(--text2)'%>"><%=s.total?(s.error/s.total*100).toFixed(1):'0.0'%>%</td>
+            <td style="min-width:120px;"><div class="progress-bar" style="margin-top:4px;"><div class="progress-fill <%=s.error/s.total>0.1?'red':''%>" style="width:<%=Math.round(s.total/mx*100)%>%"></div></div></td>
+            </tr><%})%></tbody></table>
+          </div>
+        </div>
+        <%}%>
+      </div>
+
+      <!-- ── API ANALYTICS ──────────────────────────────────────── -->
+      <div class="tab-panel" id="panel-api">
+        <% if(!apiServices||!apiServices.length){%>
+        <div class="card"><div style="text-align:center;padding:40px 20px;color:var(--text3);">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 12px;opacity:.4"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px;">No API request data yet</div>
+          <p style="font-size:12px;max-width:440px;margin:0 auto;line-height:1.7;">Add <code style="background:var(--surface3);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;">logger.requestLogger()</code> middleware to your app. See <code>client/logger.js</code>.</p>
+        </div></div>
+        <%}else{%>
+
+        <% if(hasCard('api-stats')){%>
+        <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(165px,1fr));margin-bottom:16px;">
+          <div class="stat-card"><div class="stat-icon blue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg></div><div><div class="stat-value" id="sc-total">–</div><div class="stat-label">Total Requests</div><div class="stat-sub" id="sc-total-sub">today</div></div></div>
+          <div class="stat-card"><div class="stat-icon purple"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg></div><div><div class="stat-value" id="sc-avg">–</div><div class="stat-label">Avg Response</div><div class="stat-sub" id="sc-max-sub">–</div></div></div>
+          <div class="stat-card"><div class="stat-icon red"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><div><div class="stat-value" id="sc-err">–</div><div class="stat-label">Error Rate</div><div class="stat-sub" id="sc-err-sub">–</div></div></div>
+          <div class="stat-card"><div class="stat-icon green"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div><div><div class="stat-value" id="sc-data">–</div><div class="stat-label">Data Transferred</div><div class="stat-sub" id="sc-data-sub">–</div></div></div>
+          <div class="stat-card"><div class="stat-icon yellow"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13,2 13,9 20,9"/></svg></div><div><div class="stat-value" id="sc-max">–</div><div class="stat-label">Slowest</div><div class="stat-sub">max duration</div></div></div>
+        </div>
+        <%}%>
+
+        <% if(hasCard('api-hourly')||hasCard('api-status')){%>
+        <div class="grid-2" style="margin-bottom:12px;">
+          <% if(hasCard('api-hourly')){%>
+          <div class="card"><div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Hourly Request Volume</div><div class="chart-wrap"><canvas id="hourly-chart"></canvas></div></div>
+          <%}%>
+          <% if(hasCard('api-status')){%>
+          <div class="card"><div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>Status Distribution</div>
+            <div style="display:flex;align-items:center;gap:20px;"><div style="width:140px;height:140px;flex-shrink:0;"><canvas id="status-chart"></canvas></div><div id="status-legend" style="display:flex;flex-direction:column;gap:8px;flex:1;"></div></div>
+          </div>
+          <%}%>
+        </div>
+        <%}%>
+
+        <% if(hasCard('api-slowest')){%>
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>Top 10 Slowest Endpoints</div>
+          <div style="height:220px;"><canvas id="slowest-chart"></canvas></div>
+        </div>
+        <%}%>
+
+        <% if(hasCard('api-endpoints')){%>
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-title" style="justify-content:space-between;">
+            <span style="display:flex;align-items:center;gap:8px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>All Endpoints</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <div class="search-wrap" style="width:200px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" id="ep-search" class="form-input search-input" placeholder="Filter endpoints…" oninput="filterTable()"/></div>
+              <button class="btn btn-secondary btn-xs" onclick="downloadCsv()"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="ep-table"><thead><tr><th>Method</th><th>Endpoint <button class="sort-btn" data-col="path" onclick="sortTable(this)">↕</button></th><th>Calls <button class="sort-btn" data-col="count" onclick="sortTable(this)">↕</button></th><th>Avg <button class="sort-btn" data-col="avgDuration" onclick="sortTable(this)">↕</button></th><th>P95</th><th>Max</th><th>Avg Res</th><th>Errors <button class="sort-btn" data-col="errors" onclick="sortTable(this)">↕</button></th><th>Err %</th></tr></thead>
+            <tbody id="ep-tbody"><tr><td colspan="9" style="text-align:center;color:var(--text3);padding:24px;">Loading…</td></tr></tbody></table>
+          </div>
+        </div>
+        <%}%>
+
+        <% if(hasCard('api-errors')){%>
+        <div class="card" style="margin-bottom:12px;">
+          <div class="card-title"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Error Hot-spots<span id="error-count-badge" class="badge" style="margin-left:4px;"></span></div>
+          <div class="table-wrap"><table><thead><tr><th>Method</th><th>Endpoint</th><th>Errors</th><th>5xx</th><th>Error Rate</th><th>Status Codes</th><th>Last Seen</th></tr></thead>
+          <tbody id="err-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px;">Loading…</td></tr></tbody></table></div>
+        </div>
+        <%}%>
+
+        <% if(hasCard('api-trend')){%>
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <span style="display:flex;align-items:center;gap:8px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,6 13.5,15.5 8.5,10.5 1,18"/><polyline points="17,6 23,6 23,12"/></svg>Trend Analysis<span id="trend-label" style="font-size:11px;color:var(--text3);font-weight:400;"></span></span>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <label style="font-size:11px;color:var(--text3);">From</label>
+              <input type="date" id="trend-start" class="form-input" style="max-width:130px;" max="<%=today%>"/>
+              <label style="font-size:11px;color:var(--text3);">To</label>
+              <input type="date" id="trend-end" class="form-input" style="max-width:130px;" max="<%=today%>" value="<%=today%>"/>
+              <button class="btn btn-primary btn-sm" onclick="loadTrends()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23,4 23,10 17,10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Analyse</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px;">
+            <button id="ttab-0" onclick="switchTrendTab(0)" class="ttab" style="padding:8px 16px;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent-l);cursor:pointer;">Slow Trend</button>
+            <button id="ttab-1" onclick="switchTrendTab(1)" class="ttab" style="padding:8px 16px;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer;">Hourly Pattern</button>
+            <button id="ttab-2" onclick="switchTrendTab(2)" class="ttab" style="padding:8px 16px;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer;">Error Trend</button>
+          </div>
+          <div id="tpanel-0"><div style="height:240px;"><canvas id="slow-trend-chart"></canvas></div><div id="slow-trend-meta" style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;"></div></div>
+          <div id="tpanel-1" style="display:none;"><div style="height:240px;"><canvas id="pattern-chart"></canvas></div><div id="pattern-insight" style="margin-top:10px;font-size:12px;color:var(--text2);"></div></div>
+          <div id="tpanel-2" style="display:none;"><div style="height:240px;"><canvas id="error-trend-chart"></canvas></div><div id="error-trend-meta" style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;"></div></div>
+          <div id="trend-loading" style="display:none;text-align:center;padding:32px 0;color:var(--text3);font-size:12px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin:0 auto 8px;display:block;animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Loading…</div>
+        </div>
+        <%}%>
+        <%}%>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const API_SVCS=<%- JSON.stringify(apiServices||[]) %>;
+const isDark=()=>document.documentElement.dataset.theme!=='light';
+const gc=()=>isDark()?'rgba(255,255,255,.05)':'rgba(0,0,0,.06)';
+const tc=()=>isDark()?'#5a5a78':'#9494b8';
+
+// Tab switching
+let _apiLoaded=false;
+function switchTab(t){
+  ['log','api'].forEach(x=>{document.getElementById('tab-'+x).classList.toggle('active',x===t);document.getElementById('panel-'+x).classList.toggle('active',x===t);});
+  const ac=document.getElementById('api-ctrl');
+  if(ac){ac.style.display=t==='api'?'flex':'none';}
+  location.hash=t;
+  if(t==='api'&&!_apiLoaded){_apiLoaded=true;apiInit();apiLoadAll();}
+}
+(function(){const h=location.hash.replace('#',''),q=new URLSearchParams(location.search).get('tab');if(h==='api'||q==='api')switchTab('api');})();
+
+// Log analytics charts
+const hRaw=<%- JSON.stringify(hourly?hourly.hours:[]) %>;
+const bRaw=<%- JSON.stringify(breakdown||{error:0,warn:0,info:0,debug:0}) %>;
+const tRaw=<%- JSON.stringify(trend||[]) %>;
+const d=isDark(),g=d?'rgba(255,255,255,.05)':'rgba(0,0,0,.06)',tx=d?'#5a5a78':'#9494b8';
+if(hRaw.length&&document.getElementById('hourlyChart')){new Chart(document.getElementById('hourlyChart'),{type:'bar',data:{labels:hRaw.map(h=>h.hour+':00'),datasets:[{label:'Error',data:hRaw.map(h=>h.error),backgroundColor:'rgba(239,68,68,.75)',stack:'s'},{label:'Warn',data:hRaw.map(h=>h.warn),backgroundColor:'rgba(245,158,11,.65)',stack:'s'},{label:'Info',data:hRaw.map(h=>h.info),backgroundColor:'rgba(59,130,246,.6)',stack:'s'},{label:'Debug',data:hRaw.map(h=>h.debug),backgroundColor:'rgba(107,114,128,.4)',stack:'s'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{color:tx,font:{size:11},boxWidth:12}}},scales:{x:{stacked:true,ticks:{color:tx,font:{size:10}},grid:{color:g}},y:{stacked:true,ticks:{color:tx,font:{size:10}},grid:{color:g}}}}});}
+if(document.getElementById('levelChart')){new Chart(document.getElementById('levelChart'),{type:'doughnut',data:{labels:['Error','Warn','Info','Debug'],datasets:[{data:[bRaw.error,bRaw.warn,bRaw.info,bRaw.debug],backgroundColor:['rgba(239,68,68,.85)','rgba(245,158,11,.85)','rgba(59,130,246,.85)','rgba(107,114,128,.75)'],borderWidth:2,borderColor:d?'#13131e':'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:tx,font:{size:11},boxWidth:12}}},cutout:'65%'}});}
+if(tRaw.length&&document.getElementById('trendChart')){new Chart(document.getElementById('trendChart'),{type:'line',data:{labels:tRaw.map(x=>x.date.slice(5)),datasets:[{label:'Total',data:tRaw.map(x=>x.total),borderColor:'rgba(99,102,241,.9)',backgroundColor:'rgba(99,102,241,.1)',tension:.3,fill:true,pointRadius:3},{label:'Error',data:tRaw.map(x=>x.error),borderColor:'rgba(239,68,68,.8)',backgroundColor:'transparent',tension:.3,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tx,font:{size:11},boxWidth:12}}},scales:{x:{ticks:{color:tx,font:{size:10}},grid:{color:g}},y:{ticks:{color:tx,font:{size:10}},grid:{color:g},beginAtZero:true}}}});}
+
+// API analytics
+let _ep=[],_sCol='count',_sDir='desc',_hC=null,_stC=null,_slC=null,_stTC=null,_ptC=null,_etC=null;
+function fmtMs(ms){if(ms==null)return'–';if(ms<1)return'<1ms';if(ms>=1000)return(ms/1000).toFixed(2)+'s';return ms+'ms';}
+function fmtB(b){if(!b)return'0 B';const k=1024,s=['B','KB','MB','GB'];const i=Math.floor(Math.log(b)/Math.log(k));return(b/Math.pow(k,i)).toFixed(1)+' '+s[i];}
+function dCls(ms){if(ms<200)return'dur-ok';if(ms<800)return'dur-med';return'dur-slow';}
+function eCls(r){return parseFloat(r)>5?'color:var(--red)':parseFloat(r)>1?'color:var(--yellow)':'color:var(--text2)';}
+async function afetch(url){const r=await fetch(url);if(!r.ok)throw new Error(await r.text());return r.json();}
+function setEl(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function gp(){return{svc:document.getElementById('svc-select')?.value,date:document.getElementById('api-date')?.value};}
+
+function apiInit(){
+  const sel=document.getElementById('svc-select');
+  if(sel){API_SVCS.forEach(s=>{const o=document.createElement('option');o.value=s.appName;o.textContent=s.baseApp;sel.appendChild(o);});}
+}
+async function apiLoadAll(){
+  const{svc,date}=gp();if(!svc)return;
+  await Promise.all([apiOvr(svc,date),apiHrly(svc,date),apiStat(svc,date),apiEp(svc,date),apiErr(svc,date),apiSlow(svc,date)]);
+}
+async function apiOvr(svc,date){try{const d=await afetch('/api/api-analytics/overview?service='+encodeURIComponent(svc)+'&date='+date);setEl('sc-total',d.totalRequests.toLocaleString());setEl('sc-total-sub',date);setEl('sc-avg',fmtMs(d.avgDuration));setEl('sc-max-sub','max: '+fmtMs(d.maxDuration));const e=document.getElementById('sc-err');if(e){e.textContent=d.errorRate+'%';e.style.color=parseFloat(d.errorRate)>5?'var(--red)':parseFloat(d.errorRate)>1?'var(--yellow)':'var(--green)';}setEl('sc-err-sub',d.totalErrors+' total ('+d.totalErrors5xx+' 5xx)');setEl('sc-data',d.totalDataHuman);setEl('sc-data-sub','↑ '+d.totalReqHuman+' ↓ '+d.totalResHuman);setEl('sc-max',fmtMs(d.maxDuration));}catch{}}
+async function apiHrly(svc,date){try{const d=await afetch('/api/api-analytics/hourly?service='+encodeURIComponent(svc)+'&date='+date);const h=d.hours,l=h.map(x=>x.hour+':00');if(_hC)_hC.destroy();_hC=new Chart(document.getElementById('hourly-chart'),{type:'bar',data:{labels:l,datasets:[{label:'2xx',data:h.map(x=>x.ok),backgroundColor:'rgba(34,197,94,.55)',stack:'s'},{label:'4xx',data:h.map(x=>x.warn),backgroundColor:'rgba(245,158,11,.55)',stack:'s'},{label:'5xx',data:h.map(x=>x.error),backgroundColor:'rgba(239,68,68,.75)',stack:'s'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tc(),font:{size:11}}}},scales:{x:{stacked:true,ticks:{color:tc(),font:{size:10},maxTicksLimit:12},grid:{color:gc()}},y:{stacked:true,ticks:{color:tc(),font:{size:10}},grid:{color:gc()}}}}});}catch{}}
+async function apiStat(svc,date){try{const d=await afetch('/api/api-analytics/status?service='+encodeURIComponent(svc)+'&date='+date);const dist=d.distribution,lbl=Object.keys(dist).map(k=>k+'xx'),vals=Object.values(dist),clrs={'2xx':'rgba(34,197,94,.8)','3xx':'rgba(59,130,246,.8)','4xx':'rgba(245,158,11,.8)','5xx':'rgba(239,68,68,.8)'};const bg=lbl.map(l=>clrs[l]||'rgba(107,114,128,.5)');if(_stC)_stC.destroy();_stC=new Chart(document.getElementById('status-chart'),{type:'doughnut',data:{labels:lbl,datasets:[{data:vals,backgroundColor:bg,borderColor:'transparent',borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'70%',plugins:{legend:{display:false}}}});const leg=document.getElementById('status-legend');if(leg)leg.innerHTML=lbl.map((l,i)=>'<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><div style="display:flex;align-items:center;gap:6px;"><div style="width:10px;height:10px;border-radius:2px;background:'+bg[i]+';flex-shrink:0;"></div><span style="font-size:12px;color:var(--text2);">'+l+'</span></div><span style="font-size:12px;font-weight:600;font-family:\'JetBrains Mono\',monospace;color:var(--text);">'+vals[i].toLocaleString()+'</span></div>').join('');}catch{}}
+async function apiSlow(svc,date){try{const data=await afetch('/api/api-analytics/slowest?service='+encodeURIComponent(svc)+'&date='+date+'&top=10');if(!data.length)return;if(_slC)_slC.destroy();_slC=new Chart(document.getElementById('slowest-chart'),{type:'bar',data:{labels:data.map(e=>e.method+' '+(e.path.length>30?'…'+e.path.slice(-28):e.path)),datasets:[{label:'Avg (ms)',data:data.map(e=>e.avgDuration),backgroundColor:'rgba(99,102,241,.65)',borderRadius:3},{label:'P95 (ms)',data:data.map(e=>e.p95Duration),backgroundColor:'rgba(245,158,11,.5)',borderRadius:3}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tc(),font:{size:11}}}},scales:{x:{ticks:{color:tc(),font:{size:10},callback:v=>v+'ms'},grid:{color:gc()}},y:{ticks:{color:tc(),font:{size:10}},grid:{display:false}}}}});}catch{}}
+async function apiEp(svc,date){try{_ep=await afetch('/api/api-analytics/endpoints?service='+encodeURIComponent(svc)+'&date='+date);renderTable();}catch{const t=document.getElementById('ep-tbody');if(t)t.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--red);padding:16px;">Failed to load</td></tr>';}}
+function renderTable(){const q=(document.getElementById('ep-search')?.value||'').toLowerCase();let rows=_ep.filter(e=>!q||(e.method+' '+e.path).toLowerCase().includes(q));rows.sort((a,b)=>{const av=a[_sCol],bv=b[_sCol];if(typeof av==='string')return _sDir==='asc'?av.localeCompare(bv):bv.localeCompare(av);return _sDir==='asc'?av-bv:bv-av;});const t=document.getElementById('ep-tbody');if(!t)return;t.innerHTML=rows.length?rows.map(e=>'<tr><td><span class="method-badge method-'+e.method+'">'+e.method+'</span></td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11.5px;max-width:260px;" class="truncate">'+esc(e.path)+'</td><td style="font-weight:600;color:var(--text);">'+e.count.toLocaleString()+'</td><td><span class="dur-pill '+dCls(e.avgDuration)+'">'+fmtMs(e.avgDuration)+'</span></td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11.5px;color:var(--text2);">'+fmtMs(e.p95Duration)+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11.5px;color:var(--text2);">'+fmtMs(e.maxDuration)+'</td><td style="font-size:11.5px;color:var(--text3);">'+fmtB(e.avgResBytes)+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:600;color:'+(e.errors>0?'var(--red)':'var(--text3)')+';">'+e.errors+'</td><td style="font-size:12px;'+eCls(e.errorRate)+'">'+e.errorRate+'%</td></tr>').join(''):'<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:24px;">No data</td></tr>';}
+function filterTable(){renderTable();}
+function sortTable(btn){const col=btn.dataset.col;document.querySelectorAll('.sort-btn').forEach(b=>b.className='sort-btn');_sDir=(_sCol===col&&_sDir==='asc')?'desc':'asc';if(_sCol!==col){_sDir='desc';}_sCol=col;btn.className='sort-btn '+_sDir;renderTable();}
+async function apiErr(svc,date){try{const data=await afetch('/api/api-analytics/errors?service='+encodeURIComponent(svc)+'&date='+date+'&top=20');const badge=document.getElementById('error-count-badge');if(badge){badge.textContent=data.length?data.reduce((a,e)=>a+e.errors,0)+' errors':'';badge.className='badge '+(data.length?'badge-error':'');}const t=document.getElementById('err-tbody');if(!t)return;t.innerHTML=data.length?data.map(e=>{const codes=Object.entries(e.statusCodes).map(([sc,cnt])=>'<span class="badge badge-'+(sc>=500?'error':sc>=400?'warn':'info')+'" style="font-size:9px;">'+sc+'×'+cnt+'</span>').join(' ');return'<tr><td><span class="method-badge method-'+e.method+'">'+e.method+'</span></td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11.5px;" class="truncate">'+esc(e.path)+'</td><td style="font-weight:700;color:var(--red);">'+e.errors+'</td><td style="color:'+(e.errors5xx>0?'var(--red)':'var(--text3)')+';">'+e.errors5xx+'</td><td style="font-weight:600;'+eCls(e.errorRate)+'">'+e.errorRate+'%</td><td>'+codes+'</td><td style="font-size:11px;color:var(--text3);">'+(e.lastSeen?new Date(e.lastSeen).toLocaleTimeString():'–')+'</td></tr>';}).join(''):'<tr><td colspan="7" style="text-align:center;color:var(--green);padding:24px;">No errors 🎉</td></tr>';}catch{}}
+function downloadCsv(){const h=['Method','Path','Calls','Avg(ms)','P95(ms)','Max(ms)','AvgResBytes','Errors','ErrorRate%'];const rows=_ep.map(e=>[e.method,e.path,e.count,e.avgDuration,e.p95Duration,e.maxDuration,e.avgResBytes,e.errors,e.errorRate]);const csv=[h,...rows].map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='api-analytics-'+gp().date+'.csv';a.click();}
+
+// Trend
+function switchTrendTab(i){[0,1,2].forEach(j=>{document.getElementById('tpanel-'+j).style.display=j===i?'':'none';document.getElementById('ttab-'+j).style.borderBottomColor=j===i?'var(--accent)':'transparent';document.getElementById('ttab-'+j).style.color=j===i?'var(--accent-l)':'var(--text2)';});}
+(function(){const e=new Date(),s=new Date(e);s.setDate(s.getDate()-6);const f=d=>d.toISOString().slice(0,10);const te=document.getElementById('trend-end'),ts=document.getElementById('trend-start');if(te)te.value=f(e);if(ts)ts.value=f(s);})();
+async function loadTrends(){const{svc}=gp();const s=document.getElementById('trend-start')?.value,e=document.getElementById('trend-end')?.value;if(!svc||!s||!e)return;const lbl=document.getElementById('trend-label');if(lbl)lbl.textContent=s+' → '+e;const ld=document.getElementById('trend-loading');if(ld)ld.style.display='';try{const[sd,pd,ed]=await Promise.all([afetch('/api/api-analytics/slow-trend?service='+encodeURIComponent(svc)+'&start='+s+'&end='+e),afetch('/api/api-analytics/hourly-pattern?service='+encodeURIComponent(svc)+'&start='+s+'&end='+e),afetch('/api/api-analytics/error-trend?service='+encodeURIComponent(svc)+'&start='+s+'&end='+e)]);renderSlow(sd);renderPat(pd);renderErrTrend(ed);}catch(err){if(ld)ld.textContent='Failed: '+err.message;}finally{if(ld)ld.style.display='none';}}
+function renderSlow(data){const lbl=data.map(d=>d.date.slice(5));if(_stTC)_stTC.destroy();_stTC=new Chart(document.getElementById('slow-trend-chart'),{type:'line',data:{labels:lbl,datasets:[{label:'Avg (ms)',data:data.map(d=>d.avgDuration),borderColor:'rgba(99,102,241,.9)',backgroundColor:'rgba(99,102,241,.1)',borderWidth:2,tension:.3,pointRadius:3,fill:true},{label:'P95 (ms)',data:data.map(d=>d.p95Duration),borderColor:'rgba(245,158,11,.8)',backgroundColor:'transparent',borderWidth:2,tension:.3,pointRadius:3,borderDash:[4,3]}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tc(),font:{size:11}}}},scales:{x:{ticks:{color:tc(),font:{size:10}},grid:{color:gc()}},y:{ticks:{color:tc(),font:{size:10},callback:v=>v+'ms'},grid:{color:gc()}}}}});const wd=data.filter(d=>d.totalRequests>0);if(!wd.length)return;const wo=wd.reduce((a,b)=>a.avgDuration>b.avgDuration?a:b),be=wd.reduce((a,b)=>a.avgDuration<b.avgDuration?a:b);const m=document.getElementById('slow-trend-meta');if(m)m.innerHTML='<div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);"><div style="font-size:10px;color:var(--text3);">Slowest day</div><div style="font-size:13px;font-weight:600;color:var(--red);">'+wo.date+'</div><div style="font-size:11px;color:var(--text2);">'+fmtMs(wo.avgDuration)+' avg</div></div><div style="padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);"><div style="font-size:10px;color:var(--text3);">Fastest day</div><div style="font-size:13px;font-weight:600;color:var(--green);">'+be.date+'</div><div style="font-size:11px;color:var(--text2);">'+fmtMs(be.avgDuration)+' avg</div></div>';}
+function renderPat(data){const bg=data.map(v=>{const p=v.avgDuration/Math.max(...data.map(d=>d.avgDuration),1);return p<.4?'rgba(34,197,94,.65)':p<.7?'rgba(245,158,11,.65)':'rgba(239,68,68,.75)';});if(_ptC)_ptC.destroy();_ptC=new Chart(document.getElementById('pattern-chart'),{type:'bar',data:{labels:data.map(d=>d.hour+':00'),datasets:[{label:'Avg (ms)',data:data.map(d=>d.avgDuration),backgroundColor:bg,borderRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:tc(),font:{size:10},maxTicksLimit:12},grid:{color:gc()}},y:{ticks:{color:tc(),font:{size:10},callback:v=>v+'ms'},grid:{color:gc()}}}}});}
+function renderErrTrend(data){const rates=data.map(d=>parseFloat(d.errorRate)||0),counts=data.map(d=>d.errors);if(_etC)_etC.destroy();_etC=new Chart(document.getElementById('error-trend-chart'),{type:'line',data:{labels:data.map(d=>d.date.slice(5)),datasets:[{label:'Error rate (%)',data:rates,borderColor:'rgba(239,68,68,.9)',backgroundColor:'rgba(239,68,68,.1)',borderWidth:2,tension:.3,pointRadius:3,fill:true,yAxisID:'y'},{label:'Error count',data:counts,borderColor:'rgba(245,158,11,.7)',backgroundColor:'transparent',borderWidth:1.5,tension:.3,pointRadius:2,borderDash:[4,3],yAxisID:'y2'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:tc(),font:{size:11}}}},scales:{x:{ticks:{color:tc(),font:{size:10}},grid:{color:gc()}},y:{position:'left',ticks:{color:tc(),font:{size:10},callback:v=>v+'%'},grid:{color:gc()}},y2:{position:'right',ticks:{color:tc(),font:{size:10}},grid:{display:false}}}}});}
+</script>
+</body></html>

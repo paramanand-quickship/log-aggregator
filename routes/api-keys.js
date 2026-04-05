@@ -1,0 +1,12 @@
+'use strict';
+const {Router}=require('express');
+const ApiKeyController=require('../controllers/ApiKeyController');
+const {authenticate}=require('../middleware/auth');
+const requireRole=require('../middleware/roles');
+const router=Router(), ctrl=new ApiKeyController(), admin=[authenticate,requireRole('admin')];
+router.get ('/',          ...admin,(req,res)=>ctrl.list(req,res));
+router.post('/',          ...admin,(req,res)=>ctrl.create(req,res));
+router.patch('/:id',      ...admin,(req,res)=>ctrl.update(req,res));
+router.post('/:id/revoke',...admin,(req,res)=>ctrl.revoke(req,res));
+router.delete('/:id',     ...admin,(req,res)=>ctrl.remove(req,res));
+module.exports=router;

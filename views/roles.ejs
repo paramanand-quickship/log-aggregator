@@ -1,196 +1,224 @@
 <%- include('partials/head', { title: 'Role Config' }) %>
 <style>
-  .rc-grid { display:grid; grid-template-columns: 1fr repeat(<%= roles.length %>, 120px); gap:0; }
-  .rc-head { padding:10px 14px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--text3); border-bottom:2px solid var(--border); }
-  .rc-head.role-col { text-align:center; }
-  .rc-row { display:contents; }
-  .rc-row:hover > .rc-cell { background:var(--surface2); }
-  .rc-cell { padding:9px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; font-size:12px; color:var(--text2); }
-  .rc-cell.center { justify-content:center; }
-  .rc-section-head { padding:12px 14px 6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--text3); border-bottom:1px solid var(--border); grid-column:1 / -1; background:var(--surface2); }
-  .rc-lock-badge { font-size:9px; background:rgba(245,158,11,.15); color:var(--yellow); border:1px solid rgba(245,158,11,.25); padding:1px 5px; border-radius:3px; margin-left:6px; font-weight:600; }
-
-  /* Toggle switch */
-  .rc-toggle { position:relative; width:36px; height:20px; }
-  .rc-toggle input { opacity:0; width:0; height:0; position:absolute; }
-  .rc-slider {
-    position:absolute; inset:0; background:var(--surface3); border-radius:20px;
-    border:1px solid var(--border2); cursor:pointer; transition:background .2s;
+  .role-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px; margin-bottom:14px; }
+  .role-card-header { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .role-dot { width:13px; height:13px; border-radius:50%; flex-shrink:0; }
+  .role-label { font-size:14px; font-weight:700; color:var(--text); }
+  .role-id    { font-size:11px; color:var(--text3); font-family:'JetBrains Mono',monospace; margin-top:1px; }
+  .builtin-badge { font-size:9px; padding:1px 7px; background:rgba(99,102,241,.15); color:var(--accent-l); border-radius:3px; font-weight:600; letter-spacing:.3px; text-transform:uppercase; }
+  .perm-section { margin-bottom:14px; }
+  .perm-section-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; color:var(--text3); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+  .perm-section-label::after { content:''; flex:1; height:1px; background:var(--border); }
+  .perm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(175px,1fr)); gap:6px; }
+  .perm-item {
+    display:flex; align-items:center; gap:8px; padding:7px 11px;
+    border-radius:7px; background:var(--surface2); border:1px solid var(--border);
+    font-size:12px; color:var(--text2); cursor:pointer; transition:all .15s; user-select:none;
   }
-  .rc-slider::before {
-    content:''; position:absolute; width:14px; height:14px; left:2px; bottom:2px;
-    background:var(--text3); border-radius:50%; transition:transform .2s, background .2s;
-  }
-  .rc-toggle input:checked + .rc-slider { background:var(--accent); border-color:var(--accent); }
-  .rc-toggle input:checked + .rc-slider::before { transform:translateX(16px); background:#fff; }
-  .rc-toggle input:disabled + .rc-slider { opacity:.5; cursor:not-allowed; }
+  .perm-item:hover { border-color:var(--border2); color:var(--text); background:var(--surface3); }
+  .perm-item.on { border-color:var(--accent); background:var(--accent-dim); color:var(--accent-l); }
+  .perm-item.on .perm-check { background:var(--accent); border-color:var(--accent); }
+  .perm-item.on .perm-check::after { content:''; display:block; width:7px; height:7px; background:#fff; border-radius:1px; clip-path:polygon(14% 44%,0 65%,50% 100%,100% 16%,80% 0,43% 62%); }
+  .perm-check { width:15px; height:15px; border-radius:3px; border:1.5px solid var(--border2); flex-shrink:0; transition:all .15s; display:flex; align-items:center; justify-content:center; }
+  .new-role-form { background:var(--surface2); border:1px dashed var(--border2); border-radius:var(--radius-lg); padding:18px; margin-bottom:14px; }
+  .save-indicator { font-size:11px; color:var(--text3); display:none; margin-left:auto; }
+  .save-indicator.saving { display:block; color:var(--accent-l); }
+  .save-indicator.saved  { display:block; color:var(--green); }
 </style>
-
 <div class="app-shell">
   <%- include('partials/sidebar') %>
   <div class="main-area">
-
     <header class="top-header">
       <div class="page-title">Role Configuration</div>
       <div class="header-actions">
-        <span style="font-size:12px;color:var(--text3);">Changes take effect on next page load</span>
-        <button class="btn btn-primary btn-sm" id="save-btn" onclick="saveAll()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
-          Save Changes
+        <span style="font-size:12px;color:var(--text3);">Page &amp; card permissions take effect immediately</span>
+        <button class="btn btn-secondary btn-sm" onclick="toggleNewForm()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Role
         </button>
       </div>
     </header>
-
     <div class="page-content">
 
-      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
-        <% roles.forEach(function(role) { %>
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);">
-          <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">
-            <%= role[0].toUpperCase() %>
+      <!-- New Role Form -->
+      <div class="new-role-form" id="new-role-form" style="display:none;">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px;">Create Custom Role</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:14px;">
+          <div class="form-group" style="margin:0"><label class="form-label">Role ID</label><input type="text" id="nr-id" class="form-input" placeholder="e.g. operator"/></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Display Label</label><input type="text" id="nr-label" class="form-input" placeholder="e.g. Operator"/></div>
+          <div class="form-group" style="margin:0"><label class="form-label">Badge Color</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input type="color" id="nr-color" value="#6366f1" style="width:38px;height:36px;border:none;background:none;cursor:pointer;border-radius:4px;padding:0;"/>
+              <span id="nr-color-preview" style="font-size:12px;color:var(--text2);">#6366f1</span>
+            </div>
           </div>
-          <div>
-            <div style="font-size:13px;font-weight:600;color:var(--text);text-transform:capitalize;"><%= role %></div>
-            <div style="font-size:11px;color:var(--text3);" id="summary-<%= role %>">–</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary btn-sm" onclick="createRole()">Create</button>
+            <button class="btn btn-secondary btn-sm" onclick="toggleNewForm()">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Role Cards -->
+      <% const roleNames = Object.keys(rolesData); %>
+      <% roleNames.forEach(function(roleName) { %>
+      <% const role = rolesData[roleName]; %>
+      <div class="role-card" id="role-card-<%=roleName%>">
+        <div class="role-card-header">
+          <div class="role-dot" id="dot-<%=roleName%>" style="background:<%=role.color||'#6b7280'%>"></div>
+          <div style="flex:1;">
+            <div class="role-label" id="label-display-<%=roleName%>"><%=role.label||roleName%></div>
+            <div class="role-id"><%=roleName%></div>
+          </div>
+          <span id="save-ind-<%=roleName%>" class="save-indicator"></span>
+          <% if (role.isBuiltIn) { %><span class="builtin-badge">built-in</span><% } %>
+          <% if (!role.isBuiltIn) { %>
+          <button class="btn btn-danger btn-xs" onclick="deleteRole('<%=roleName%>')">Delete</button>
+          <% } %>
+          <button class="btn btn-primary btn-sm" onclick="saveRole('<%=roleName%>')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+            Save
+          </button>
+        </div>
+
+        <!-- Color + label editors (for built-in and custom) -->
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;">
+            <label style="font-size:11px;color:var(--text3);font-weight:500;">Label:</label>
+            <input type="text" class="form-input" id="label-<%=roleName%>" value="<%=role.label||roleName%>" style="max-width:200px;padding:5px 10px;"/>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:11px;color:var(--text3);font-weight:500;">Color:</label>
+            <input type="color" id="color-<%=roleName%>" value="<%=role.color||'#6b7280'%>" style="width:32px;height:30px;border:none;background:none;cursor:pointer;border-radius:4px;padding:0;" oninput="document.getElementById('dot-<%=roleName%>').style.background=this.value"/>
+          </div>
+        </div>
+
+        <!-- Pages -->
+        <div class="perm-section">
+          <div class="perm-section-label">Pages</div>
+          <div class="perm-grid">
+            <% allPages.forEach(function(page) { %>
+            <% const isOn = (role.pages||[]).includes(page.id); %>
+            <div class="perm-item <%=isOn?'on':''%>" data-role="<%=roleName%>" data-type="page" data-id="<%=page.id%>" onclick="togglePerm(this)">
+              <div class="perm-check"></div>
+              <span><%=page.label%></span>
+              <% if (page.adminOnly) { %><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:auto;opacity:.4"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><% } %>
+            </div>
+            <% }) %>
+          </div>
+        </div>
+
+        <!-- Cards (grouped by section) -->
+        <%
+          const sections = [...new Set(allCards.map(c=>c.section))];
+        %>
+        <% sections.forEach(function(section) { %>
+        <div class="perm-section">
+          <div class="perm-section-label"><%=section%></div>
+          <div class="perm-grid">
+            <% allCards.filter(c=>c.section===section).forEach(function(card) { %>
+            <% const isOn = (role.cards||[]).includes(card.id); %>
+            <div class="perm-item <%=isOn?'on':''%>" data-role="<%=roleName%>" data-type="card" data-id="<%=card.id%>" onclick="togglePerm(this)">
+              <div class="perm-check"></div>
+              <span><%=card.label%></span>
+            </div>
+            <% }) %>
           </div>
         </div>
         <% }) %>
-        <div style="padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:var(--radius-lg);display:flex;align-items:center;gap:8px;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          <span style="font-size:12px;color:var(--text2);">Locked items <span style="font-family:'JetBrains Mono',monospace;background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px;">🔒</span> cannot be removed — they are required for that role to function.</span>
-        </div>
       </div>
+      <% }) %>
 
-      <!-- ── Page Access ─────────────────────────────────────── -->
-      <div class="card" style="margin-bottom:12px;padding:0;overflow:hidden;">
-        <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
-          <span style="font-size:13px;font-weight:600;color:var(--text2);">Page Access</span>
-        </div>
-
-        <div class="rc-grid" id="pages-grid">
-          <!-- header -->
-          <div class="rc-head">Page</div>
-          <% roles.forEach(function(role) { %>
-          <div class="rc-head role-col" style="text-transform:capitalize;"><%= role %></div>
-          <% }) %>
-
-          <% allPages.forEach(function(page) { %>
-          <div class="rc-row">
-            <div class="rc-cell">
-              <%= page.label %>
-              <% if (page.lockFor && page.lockFor.length) { %><span class="rc-lock-badge">🔒</span><% } %>
-            </div>
-            <% roles.forEach(function(role) { %>
-            <%
-              const isLocked  = page.lockFor && page.lockFor.includes(role);
-              const isChecked = (config[role] && config[role].pages && config[role].pages.includes(page.id)) || isLocked;
-            %>
-            <div class="rc-cell center">
-              <label class="rc-toggle">
-                <input type="checkbox"
-                  data-type="page" data-role="<%= role %>" data-id="<%= page.id %>"
-                  <%= isChecked ? 'checked' : '' %>
-                  <%= isLocked  ? 'disabled' : '' %>
-                  onchange="updateSummary('<%= role %>')"/>
-                <span class="rc-slider"></span>
-              </label>
-            </div>
-            <% }) %>
-          </div>
-          <% }) %>
-        </div>
-      </div>
-
-      <!-- ── Dashboard Cards ────────────────────────────────── -->
-      <div class="card" style="padding:0;overflow:hidden;">
-        <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
-          <span style="font-size:13px;font-weight:600;color:var(--text2);">Dashboard Cards</span>
-          <span style="font-size:11px;color:var(--text3);">— controls what widgets are visible on the Dashboard for each role</span>
-        </div>
-
-        <div class="rc-grid" id="cards-grid">
-          <div class="rc-head">Card</div>
-          <% roles.forEach(function(role) { %>
-          <div class="rc-head role-col" style="text-transform:capitalize;"><%= role %></div>
-          <% }) %>
-
-          <%
-            const sections = [...new Set(allCards.map(c => c.section))];
-          %>
-          <% sections.forEach(function(section) { %>
-            <div class="rc-section-head"><%= section %></div>
-            <% allCards.filter(c => c.section === section).forEach(function(card) { %>
-            <div class="rc-row">
-              <div class="rc-cell"><%= card.label %></div>
-              <% roles.forEach(function(role) { %>
-              <%
-                const isCardOn = config[role] && config[role].cards && config[role].cards.includes(card.id);
-              %>
-              <div class="rc-cell center">
-                <label class="rc-toggle">
-                  <input type="checkbox"
-                    data-type="card" data-role="<%= role %>" data-id="<%= card.id %>"
-                    <%= isCardOn ? 'checked' : '' %>
-                    onchange="updateSummary('<%= role %>')"/>
-                  <span class="rc-slider"></span>
-                </label>
-              </div>
-              <% }) %>
-            </div>
-            <% }) %>
-          <% }) %>
-        </div>
-      </div>
-
-    </div><!-- /page-content -->
+    </div>
   </div>
 </div>
 
 <script>
-const ROLES = <%- JSON.stringify(roles) %>;
-
-function getToggles(type, role) {
-  return [...document.querySelectorAll(`input[data-type="${type}"][data-role="${role}"]`)];
+// ── Toggle perm item ────────────────────────────────────────────────────────
+function togglePerm(el) {
+  el.classList.toggle('on');
 }
 
-function updateSummary(role) {
-  const pages = getToggles('page', role).filter(t => t.checked).length;
-  const cards = getToggles('card', role).filter(t => t.checked).length;
-  const el    = document.getElementById('summary-' + role);
-  if (el) el.textContent = `${pages} pages · ${cards} cards`;
+function getPerms(roleName, type) {
+  return [...document.querySelectorAll(
+    '[data-role="'+roleName+'"][data-type="'+type+'"].on'
+  )].map(el => el.dataset.id);
 }
 
-async function saveAll() {
-  const payload = {};
-  ROLES.forEach(role => {
-    payload[role] = {
-      pages: getToggles('page', role).filter(t => t.checked).map(t => t.dataset.id),
-      cards: getToggles('card', role).filter(t => t.checked).map(t => t.dataset.id),
-    };
+function toggleNewForm() {
+  const f = document.getElementById('new-role-form');
+  f.style.display = f.style.display === 'none' ? '' : 'none';
+}
+
+// Color preview in "new role" form
+const nrColorInput = document.getElementById('nr-color');
+if (nrColorInput) {
+  nrColorInput.addEventListener('input', function() {
+    const preview = document.getElementById('nr-color-preview');
+    if (preview) preview.textContent = this.value;
   });
+}
 
-  const btn = document.getElementById('save-btn');
-  btn.disabled = true; btn.textContent = 'Saving…';
+// ── Save role ────────────────────────────────────────────────────────────────
+async function saveRole(name) {
+  const pages  = getPerms(name, 'page');
+  const cards  = getPerms(name, 'card');
+  const label  = document.getElementById('label-' + name)?.value || name;
+  const color  = document.getElementById('color-' + name)?.value || '#6b7280';
+
+  const ind = document.getElementById('save-ind-' + name);
+  if (ind) { ind.textContent = 'Saving…'; ind.className = 'save-indicator saving'; }
 
   try {
-    const r = await fetch('/api/role-config', {
-      method:  'POST',
+    const r = await fetch('/api/role-config/' + encodeURIComponent(name), {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
+      body: JSON.stringify({ label, color, pages, cards }),
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.error);
-    toast('Role config saved — changes apply on next page load', 'success');
-  } catch (e) { toast(e.message, 'error'); }
-  finally {
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg> Save Changes';
+    if (!r.ok) { toast(d.error || 'Save failed', 'error'); if(ind){ind.textContent='Failed';ind.className='save-indicator';} return; }
+
+    // Update dot color immediately
+    const dot = document.getElementById('dot-' + name);
+    if (dot) dot.style.background = color;
+    const labelDisplay = document.getElementById('label-display-' + name);
+    if (labelDisplay) labelDisplay.textContent = label;
+
+    if (ind) { ind.textContent = 'Saved ✓'; ind.className = 'save-indicator saved'; setTimeout(()=>{ind.style.display='none';ind.className='save-indicator';},2500); }
+    toast('"' + name + '" permissions saved — takes effect on next page load', 'success');
+  } catch(e) {
+    toast('Network error', 'error');
+    if (ind) { ind.textContent='Error'; ind.className='save-indicator'; }
   }
 }
 
-// Init summaries
-ROLES.forEach(updateSummary);
+// ── Create role ──────────────────────────────────────────────────────────────
+async function createRole() {
+  const id    = document.getElementById('nr-id').value.trim();
+  const label = document.getElementById('nr-label').value.trim();
+  const color = document.getElementById('nr-color').value;
+  if (!id) { toast('Role ID is required', 'error'); return; }
+
+  const r = await fetch('/api/role-config/' + encodeURIComponent(id), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label: label || id, color, pages:[], cards:[] }),
+  });
+  const d = await r.json();
+  if (!r.ok) { toast(d.error || 'Create failed', 'error'); return; }
+  toast('Role "' + id + '" created', 'success');
+  location.reload();
+}
+
+// ── Delete role ──────────────────────────────────────────────────────────────
+async function deleteRole(name) {
+  if (!confirm('Delete role "' + name + '"?\nUsers assigned this role will keep the role name but lose all page access until reassigned.')) return;
+  const r = await fetch('/api/role-config/' + encodeURIComponent(name), { method: 'DELETE' });
+  const d = await r.json();
+  if (!r.ok) { toast(d.error || 'Delete failed', 'error'); return; }
+  toast('Role "' + name + '" deleted', 'success');
+  const card = document.getElementById('role-card-' + name);
+  if (card) { card.style.opacity='0'; card.style.transition='opacity .2s'; setTimeout(()=>card.remove(),200); }
+}
 </script>
 </body></html>

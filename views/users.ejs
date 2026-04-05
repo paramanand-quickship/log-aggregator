@@ -1,0 +1,153 @@
+<%- include('partials/head', { title: 'Users' }) %>
+<div class="app-shell">
+  <%- include('partials/sidebar') %>
+  <div class="main-area">
+    <header class="top-header">
+      <div class="page-title">User Management</div>
+      <div class="header-actions">
+        <button class="btn btn-primary btn-sm" onclick="openAddModal()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add User
+        </button>
+      </div>
+    </header>
+    <div class="page-content">
+      <div class="card">
+        <div class="table-wrap">
+          <table id="users-table">
+            <thead><tr><th>User</th><th>Role</th><th>2FA</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody>
+              <% users.forEach(function(u){ %>
+              <tr id="row-<%=u.username%>">
+                <td>
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:30px;height:30px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0;"><%=u.username[0].toUpperCase()%></div>
+                    <div><div style="font-weight:600;color:var(--text);font-size:13px;"><%=u.username%></div></div>
+                  </div>
+                </td>
+                <td>
+                  <% if(u.username !== user.username){ %>
+                  <select class="form-select" style="max-width:120px;padding:4px 8px;" onchange="changeRole('<%=u.username%>',this.value)">
+                    <% roles.forEach(function(r){ %><option value="<%=r%>" <%=u.role===r?'selected':''%>><%=r%></option><% }) %>
+                  </select>
+                  <% }else{ %>
+                  <span class="badge badge-purple"><%=u.role%> (you)</span>
+                  <% } %>
+                </td>
+                <td>
+                  <% if(u.totpEnabled){ %>
+                  <div style="display:flex;align-items:center;gap:6px;"><span class="dot dot-green"></span><span style="font-size:12px;color:var(--green)">Enabled</span>
+                  <% if(u.username!==user.username){ %><button class="btn btn-danger btn-xs" onclick="revoke2fa('<%=u.username%>')">Revoke</button><% } %>
+                  </div>
+                  <% }else{ %><span style="font-size:12px;color:var(--text3)">Off</span><% } %>
+                </td>
+                <td style="color:var(--text3);font-size:11px;"><%=u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'%></td>
+                <td>
+                  <div style="display:flex;gap:6px;">
+                    <button class="btn btn-secondary btn-xs" onclick="openResetModal('<%=u.username%>')">Reset PW</button>
+                    <% if(u.username!==user.username){ %>
+                    <button class="btn btn-danger btn-xs" onclick="deleteUser('<%=u.username%>')">Delete</button>
+                    <% } %>
+                  </div>
+                </td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal-box">
+    <div class="modal-title">Add User</div>
+    <div class="modal-sub">New user will be able to log in immediately.</div>
+    <div class="form-group"><label class="form-label">Username</label><input type="text" id="new-un" class="form-input" placeholder="johndoe" autocomplete="off"/></div>
+    <div class="form-group"><label class="form-label">Password</label><input type="password" id="new-pw" class="form-input" placeholder="Min. 8 characters"/></div>
+    <div class="form-group"><label class="form-label">Role</label>
+      <select id="new-role" class="form-select">
+        <% roles.forEach(function(r){ %><option value="<%=r%>"><%=r%></option><% }) %>
+      </select>
+    </div>
+    <div id="add-err" style="display:none;color:var(--red);font-size:12px;margin-bottom:12px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="addUser()">Create User</button>
+      <button class="btn btn-secondary" onclick="closeModal('add-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal-overlay" id="reset-modal">
+  <div class="modal-box">
+    <div class="modal-title">Reset Password</div>
+    <div class="modal-sub">Set a new password for <strong id="reset-target-label"></strong></div>
+    <input type="hidden" id="reset-target"/>
+    <div class="form-group"><label class="form-label">New Password</label><input type="password" id="reset-pw" class="form-input" placeholder="Min. 8 characters"/></div>
+    <div id="reset-err" style="display:none;color:var(--red);font-size:12px;margin-bottom:12px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="doResetPw()">Update Password</button>
+      <button class="btn btn-secondary" onclick="closeModal('reset-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function openAddModal(){document.getElementById('new-un').value='';document.getElementById('new-pw').value='';document.getElementById('add-err').style.display='none';document.getElementById('add-modal').classList.add('open');}
+function openResetModal(un){document.getElementById('reset-target').value=un;document.getElementById('reset-target-label').textContent=un;document.getElementById('reset-pw').value='';document.getElementById('reset-err').style.display='none';document.getElementById('reset-modal').classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay.open').forEach(m=>m.classList.remove('open'));});
+
+async function addUser(){
+  const un=document.getElementById('new-un').value.trim(),pw=document.getElementById('new-pw').value,role=document.getElementById('new-role').value;
+  const errEl=document.getElementById('add-err');errEl.style.display='none';
+  try{
+    const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:un,password:pw,role})});
+    const d=await r.json();
+    if(!r.ok){errEl.textContent=d.error;errEl.style.display='';return;}
+    toast('User "'+un+'" created','success');closeModal('add-modal');location.reload();
+  }catch(e){errEl.textContent='Network error';errEl.style.display='';}
+}
+
+async function changeRole(un,role){
+  try{
+    const r=await fetch('/api/users/'+encodeURIComponent(un)+'/role',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({role})});
+    const d=await r.json();
+    if(!r.ok){toast(d.error,'error');return;}
+    toast('"'+un+'" role updated to '+role,'success');
+  }catch{toast('Error updating role','error');}
+}
+
+async function doResetPw(){
+  const un=document.getElementById('reset-target').value,pw=document.getElementById('reset-pw').value;
+  const errEl=document.getElementById('reset-err');errEl.style.display='none';
+  try{
+    const r=await fetch('/api/users/'+encodeURIComponent(un)+'/reset-password',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({newPassword:pw})});
+    const d=await r.json();
+    if(!r.ok){errEl.textContent=d.error;errEl.style.display='';return;}
+    toast('Password reset for "'+un+'"','success');closeModal('reset-modal');
+  }catch(e){errEl.textContent='Network error';errEl.style.display='';}
+}
+
+async function revoke2fa(un){
+  if(!confirm('Revoke 2FA for "'+un+'"?'))return;
+  const r=await fetch('/api/users/'+encodeURIComponent(un)+'/2fa',{method:'DELETE'});
+  const d=await r.json();
+  if(!r.ok){toast(d.error,'error');return;}
+  toast('2FA revoked for "'+un+'"','success');location.reload();
+}
+
+async function deleteUser(un){
+  if(!confirm('Delete user "'+un+'"? This cannot be undone.'))return;
+  const r=await fetch('/api/users/'+encodeURIComponent(un),{method:'DELETE'});
+  const d=await r.json();
+  if(!r.ok){toast(d.error,'error');return;}
+  toast('User "'+un+'" deleted','success');
+  const row=document.getElementById('row-'+un);if(row)row.remove();
+}
+</script>
+</body></html>

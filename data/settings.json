@@ -1,0 +1,6 @@
+{
+  "retentionDays": 7,
+  "webhookUrl": "",
+  "enableStream": true,
+  "ipWhitelist": []
+}
