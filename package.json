@@ -1,10 +1,10 @@
 {
-  "name": "blorq",
+  "name": "blorq-cli",
   "version": "1.0.1",
-  "description": "Blorq — Production-grade open-source log aggregator. One-command install, runs as a system service on macOS, Linux & Windows.",
+  "description": "blorq-clinpm pkg fix — Production-grade open-source log aggregator. One-command install, runs as a system service on macOS, Linux & Windows.",
   "main": "server.js",
   "bin": {
-    "blorq": "./bin/blorq"
+    "blorq": "bin/blorq"
   },
   "files": [
     "bin",
@@ -41,7 +41,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/blorq"
+    "url": "git+https://github.com/your-org/blorq.git"
   },
   "bugs": {
     "url": "https://github.com/your-org/blorq/issues"
