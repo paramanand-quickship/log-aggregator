@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  blorq:
+    image: blorq:latest
+    # Or build locally:
+    build: .
+    container_name: blorq
+    restart: unless-stopped
+    ports:
+      - "9900:9900"
+    volumes:
+      - ./data:/data     # user accounts, keys, roles, settings
+      - ./logs:/logs     # ingested log files
+    environment:
+      NODE_ENV:   production
+      PORT:       9900
+      JWT_SECRET: change-me-to-a-32-char-random-string
+      # DATA_DIR and LOG_BASE_DIR are set by the image defaults
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9900/api/health"]
+      interval: 30s
+      timeout:  5s
+      retries:  3

@@ -1,0 +1,536 @@
+#!/usr/bin/env node
+'use strict';
+
+/**
+ * Blorq CLI
+ * Usage:
+ *   blorq start          Start server in foreground
+ *   blorq start --port 9900 --data ./data
+ *   blorq stop           Stop background service
+ *   blorq restart        Restart service
+ *   blorq status         Show running status + version
+ *   blorq setup          First-run: create data/, .env, default users
+ *   blorq service install   Register as OS service (auto-start on boot)
+ *   blorq service uninstall Remove OS service
+ *   blorq service start     Start OS service
+ *   blorq service stop      Stop OS service
+ *   blorq service logs      Tail service logs
+ *   blorq open           Open Blorq in default browser
+ *   blorq --version / -v
+ *   blorq --help / -h
+ */
+
+const path    = require('path');
+const fs      = require('fs');
+const os      = require('os');
+const { execSync, spawn, spawnSync } = require('child_process');
+
+// ── Paths ─────────────────────────────────────────────────────────────────
+const BLORQ_DIR  = path.resolve(__dirname, '..');        // root of blorq install
+const PKG        = require(path.join(BLORQ_DIR, 'package.json'));
+const VERSION    = PKG.version;
+const PID_FILE   = path.join(os.homedir(), '.blorq', 'blorq.pid');
+const LOG_FILE   = path.join(os.homedir(), '.blorq', 'blorq.log');
+const SERVICE_ID = 'dev.blorq.server';
+
+// Colours
+const C = {
+  reset:  '\x1b[0m',
+  bold:   '\x1b[1m',
+  dim:    '\x1b[2m',
+  red:    '\x1b[31m',
+  green:  '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue:   '\x1b[34m',
+  cyan:   '\x1b[36m',
+  white:  '\x1b[37m',
+};
+
+function c(color, text) { return C[color] + text + C.reset; }
+function ok(msg)    { console.log(c('green','  ✓ ') + msg); }
+function info(msg)  { console.log(c('blue', '  → ') + msg); }
+function warn(msg)  { console.log(c('yellow','  ⚠ ') + msg); }
+function fail(msg)  { console.error(c('red', '  ✗ ') + msg); }
+function title(msg) { console.log('\n' + c('bold', c('cyan', msg)) + '\n'); }
+
+function ensureDir(d) {
+  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+}
+
+// ── Arg parsing ───────────────────────────────────────────────────────────
+const args    = process.argv.slice(2);
+const command = args[0] || 'help';
+const subCmd  = args[1] || '';
+
+function getFlag(flag, defaultVal) {
+  const i = args.indexOf(flag);
+  return i !== -1 && args[i + 1] ? args[i + 1] : defaultVal;
+}
+
+function hasFlag(flag) { return args.includes(flag); }
+
+// ── Banner ────────────────────────────────────────────────────────────────
+function banner() {
+  console.log('');
+  console.log(c('bold', c('cyan', '  ██████╗ ██╗      ██████╗ ██████╗  ██████╗ ')));
+  console.log(c('bold', c('cyan', '  ██╔══██╗██║     ██╔═══██╗██╔══██╗██╔═══██╗')));
+  console.log(c('bold', c('cyan', '  ██████╔╝██║     ██║   ██║██████╔╝██║   ██║')));
+  console.log(c('bold', c('cyan', '  ██╔══██╗██║     ██║   ██║██╔══██╗██║▄▄ ██║')));
+  console.log(c('bold', c('cyan', '  ██████╔╝███████╗╚██████╔╝██║  ██║╚██████╔╝')));
+  console.log(c('bold', c('cyan', '  ╚═════╝ ╚══════╝ ╚═════╝ ╚═╝  ╚═╝ ╚══▀▀═╝ ')));
+  console.log('');
+  console.log(c('dim', '  Production-grade log aggregator  ') + c('cyan', 'v' + VERSION));
+  console.log('');
+}
+
+// ── PID helpers ───────────────────────────────────────────────────────────
+function readPid() {
+  try { return parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10) || null; }
+  catch { return null; }
+}
+
+function isRunning(pid) {
+  if (!pid) return false;
+  try { process.kill(pid, 0); return true; }
+  catch { return false; }
+}
+
+function writePid(pid) {
+  ensureDir(path.dirname(PID_FILE));
+  fs.writeFileSync(PID_FILE, String(pid), 'utf8');
+}
+
+function clearPid() {
+  try { fs.unlinkSync(PID_FILE); } catch {}
+}
+
+// ── Platform detection ────────────────────────────────────────────────────
+const PLATFORM = process.platform; // 'darwin' | 'linux' | 'win32'
+
+// ── Commands ──────────────────────────────────────────────────────────────
+
+// ─── start ────────────────────────────────────────────────────────────────
+function cmdStart() {
+  banner();
+  const port    = getFlag('--port', process.env.PORT || '9900');
+  const dataDir = getFlag('--data', process.env.DATA_DIR || path.join(BLORQ_DIR, 'data'));
+  const bg      = hasFlag('--background') || hasFlag('-b');
+
+  // Ensure data dir + setup
+  ensureDir(dataDir);
+  const usersFile = path.join(dataDir, 'users.json');
+  if (!fs.existsSync(usersFile)) {
+    info('No data found — running first-time setup…');
+    spawnSync(process.execPath, [path.join(BLORQ_DIR, 'setup.js')], { stdio: 'inherit', cwd: BLORQ_DIR });
+    console.log('');
+  }
+
+  if (bg) {
+    // Background mode — detach process
+    const pid = readPid();
+    if (isRunning(pid)) {
+      fail('Blorq is already running (PID ' + pid + ')');
+      process.exit(1);
+    }
+    ensureDir(path.dirname(LOG_FILE));
+    const out = fs.openSync(LOG_FILE, 'a');
+    const child = spawn(process.execPath, [path.join(BLORQ_DIR, 'server.js')], {
+      detached:  true,
+      stdio:     ['ignore', out, out],
+      cwd:       BLORQ_DIR,
+      env: { ...process.env, PORT: port, DATA_DIR: dataDir },
+    });
+    child.unref();
+    writePid(child.pid);
+    ok('Blorq started in background (PID ' + child.pid + ')');
+    ok('URL: ' + c('cyan', 'http://localhost:' + port));
+    info('Logs: ' + LOG_FILE);
+    info('Stop: blorq stop');
+    console.log('');
+  } else {
+    // Foreground
+    info('Starting Blorq on ' + c('cyan', 'http://localhost:' + port));
+    info('Press Ctrl+C to stop\n');
+    const child = spawn(process.execPath, [path.join(BLORQ_DIR, 'server.js')], {
+      stdio: 'inherit',
+      cwd:   BLORQ_DIR,
+      env: { ...process.env, PORT: port, DATA_DIR: dataDir },
+    });
+    child.on('exit', code => process.exit(code || 0));
+  }
+}
+
+// ─── stop ─────────────────────────────────────────────────────────────────
+function cmdStop() {
+  const pid = readPid();
+  if (!isRunning(pid)) {
+    warn('Blorq is not running');
+    clearPid();
+    process.exit(0);
+  }
+  try {
+    process.kill(pid, 'SIGTERM');
+    ok('Stopped Blorq (PID ' + pid + ')');
+    clearPid();
+  } catch (e) {
+    fail('Could not stop Blorq: ' + e.message);
+    process.exit(1);
+  }
+}
+
+// ─── restart ──────────────────────────────────────────────────────────────
+function cmdRestart() {
+  const pid = readPid();
+  if (isRunning(pid)) {
+    info('Stopping current instance…');
+    try { process.kill(pid, 'SIGTERM'); clearPid(); } catch {}
+    // Wait briefly for clean exit
+    const deadline = Date.now() + 3000;
+    while (isRunning(pid) && Date.now() < deadline) { /* spin */ }
+  }
+  // Start fresh
+  info('Restarting…\n');
+  args.push('--background');
+  cmdStart();
+}
+
+// ─── status ───────────────────────────────────────────────────────────────
+function cmdStatus() {
+  const pid  = readPid();
+  const port = process.env.PORT || '9900';
+  console.log('');
+  console.log(c('bold', '  Blorq') + '  ' + c('dim', 'v' + VERSION));
+  console.log('');
+  if (isRunning(pid)) {
+    console.log('  Status   ' + c('green', '● running') + '  ' + c('dim', 'PID ' + pid));
+    console.log('  URL      ' + c('cyan',  'http://localhost:' + port));
+    console.log('  Logs     ' + c('dim',   LOG_FILE));
+  } else {
+    console.log('  Status   ' + c('red', '● stopped'));
+    console.log('  Run:     ' + c('cyan', 'blorq start'));
+  }
+  console.log('  Data     ' + c('dim', process.env.DATA_DIR || path.join(BLORQ_DIR, 'data')));
+  console.log('  Install  ' + c('dim', BLORQ_DIR));
+  console.log('  Platform ' + c('dim', PLATFORM + ' ' + os.arch()));
+  console.log('');
+}
+
+// ─── open ─────────────────────────────────────────────────────────────────
+function cmdOpen() {
+  const port = process.env.PORT || '9900';
+  const url  = 'http://localhost:' + port;
+  const pid  = readPid();
+  if (!isRunning(pid)) {
+    warn('Blorq may not be running. Open anyway: ' + c('cyan', url));
+  }
+  info('Opening ' + url);
+  const open = PLATFORM === 'win32' ? 'start' : PLATFORM === 'darwin' ? 'open' : 'xdg-open';
+  try { execSync(open + ' ' + url, { stdio: 'ignore' }); }
+  catch { info('Open manually: ' + c('cyan', url)); }
+}
+
+// ─── service ──────────────────────────────────────────────────────────────
+function cmdService() {
+  const action = subCmd || 'help';
+  switch (action) {
+    case 'install':   return serviceInstall();
+    case 'uninstall': return serviceUninstall();
+    case 'start':     return serviceStart();
+    case 'stop':      return serviceStop();
+    case 'restart':   return serviceRestart();
+    case 'logs':      return serviceLogs();
+    default:
+      console.log('\nUsage: blorq service <install|uninstall|start|stop|restart|logs>\n');
+  }
+}
+
+// ── macOS launchd ─────────────────────────────────────────────────────────
+function plistPath() {
+  return path.join(os.homedir(), 'Library', 'LaunchAgents', SERVICE_ID + '.plist');
+}
+
+function writePlist(port, dataDir) {
+  const nodePath  = process.execPath;
+  const serverPath = path.join(BLORQ_DIR, 'server.js');
+  const logOut    = path.join(os.homedir(), '.blorq', 'stdout.log');
+  const logErr    = path.join(os.homedir(), '.blorq', 'stderr.log');
+  ensureDir(path.join(os.homedir(), '.blorq'));
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>             <string>${SERVICE_ID}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${nodePath}</string>
+    <string>${serverPath}</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORT</key>     <string>${port}</string>
+    <key>DATA_DIR</key> <string>${dataDir}</string>
+    <key>NODE_ENV</key> <string>production</string>
+  </dict>
+  <key>WorkingDirectory</key>  <string>${BLORQ_DIR}</string>
+  <key>RunAtLoad</key>         <true/>
+  <key>KeepAlive</key>         <true/>
+  <key>StandardOutPath</key>   <string>${logOut}</string>
+  <key>StandardErrorPath</key> <string>${logErr}</string>
+  <key>ProcessType</key>       <string>Background</string>
+</dict>
+</plist>`;
+}
+
+// ── Linux systemd ─────────────────────────────────────────────────────────
+function systemdPath()    { return path.join(os.homedir(), '.config', 'systemd', 'user', 'blorq.service'); }
+function systemdPathSys() { return '/etc/systemd/system/blorq.service'; } // root install
+
+function writeSystemd(port, dataDir) {
+  const nodePath   = process.execPath;
+  const serverPath = path.join(BLORQ_DIR, 'server.js');
+  const logDir     = path.join(os.homedir(), '.blorq');
+  ensureDir(logDir);
+
+  return `[Unit]
+Description=Blorq Log Aggregator v${VERSION}
+After=network.target
+
+[Service]
+Type=simple
+User=${os.userInfo().username}
+WorkingDirectory=${BLORQ_DIR}
+ExecStart=${nodePath} ${serverPath}
+Restart=on-failure
+RestartSec=5s
+Environment=PORT=${port}
+Environment=DATA_DIR=${dataDir}
+Environment=NODE_ENV=production
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=blorq
+
+[Install]
+WantedBy=default.target
+`;
+}
+
+// ── Windows NSSM / sc ────────────────────────────────────────────────────
+function writeWindowsScript(port, dataDir) {
+  const nodePath   = process.execPath;
+  const serverPath = path.join(BLORQ_DIR, 'server.js');
+  // Returns a batch script that installs via sc.exe
+  return `@echo off
+echo Installing Blorq as Windows service...
+sc create Blorq binPath= "${nodePath} ${serverPath}" start= auto DisplayName= "Blorq Log Aggregator"
+sc description Blorq "Blorq production-grade log aggregator"
+sc start Blorq
+echo Done. Blorq will start automatically on login.
+`;
+}
+
+function serviceInstall() {
+  const port    = getFlag('--port', process.env.PORT || '9900');
+  const dataDir = getFlag('--data', path.join(BLORQ_DIR, 'data'));
+  ensureDir(dataDir);
+
+  title('Installing Blorq as a system service');
+
+  if (PLATFORM === 'darwin') {
+    const plist = plistPath();
+    ensureDir(path.dirname(plist));
+    fs.writeFileSync(plist, writePlist(port, dataDir), 'utf8');
+    try {
+      // Unload first (in case it already exists)
+      try { execSync('launchctl unload "' + plist + '" 2>/dev/null', { stdio: 'ignore' }); } catch {}
+      execSync('launchctl load "' + plist + '"');
+      ok('Service registered with launchd');
+      ok('Blorq will start automatically on login');
+      ok('URL: ' + c('cyan', 'http://localhost:' + port));
+      console.log('');
+      info('Control: blorq service start|stop|restart|logs');
+      console.log('');
+    } catch (e) {
+      warn('launchctl failed: ' + e.message);
+      info('Plist written to: ' + plist);
+      info('Load manually:   launchctl load "' + plist + '"');
+    }
+
+  } else if (PLATFORM === 'linux') {
+    const svcPath = systemdPath();
+    ensureDir(path.dirname(svcPath));
+    fs.writeFileSync(svcPath, writeSystemd(port, dataDir), 'utf8');
+    try {
+      execSync('systemctl --user daemon-reload');
+      execSync('systemctl --user enable blorq.service');
+      execSync('systemctl --user start  blorq.service');
+      ok('Service enabled and started via systemd (user)');
+      ok('Blorq starts automatically on login');
+      ok('URL: ' + c('cyan', 'http://localhost:' + port));
+      console.log('');
+      info('Logs:    journalctl --user -u blorq -f');
+      info('Control: blorq service start|stop|restart|logs');
+      console.log('');
+    } catch (e) {
+      warn('systemctl failed: ' + e.message);
+      info('Unit file: ' + svcPath);
+      info('Try:   systemctl --user daemon-reload && systemctl --user enable --now blorq');
+    }
+
+  } else if (PLATFORM === 'win32') {
+    const batchPath = path.join(BLORQ_DIR, 'install-service.bat');
+    fs.writeFileSync(batchPath, writeWindowsScript(port, dataDir), 'utf8');
+    warn('Run the generated script as Administrator:');
+    info(batchPath);
+    info('');
+    info('Or use NSSM (recommended): https://nssm.cc');
+    info('  nssm install Blorq "' + process.execPath + '" "' + path.join(BLORQ_DIR, 'server.js') + '"');
+    info('  nssm start Blorq');
+  } else {
+    warn('Unsupported platform: ' + PLATFORM);
+    info('Start manually: blorq start --background');
+  }
+}
+
+function serviceUninstall() {
+  title('Uninstalling Blorq service');
+  if (PLATFORM === 'darwin') {
+    const plist = plistPath();
+    try { execSync('launchctl unload "' + plist + '" 2>/dev/null', { stdio: 'ignore' }); } catch {}
+    try { fs.unlinkSync(plist); } catch {}
+    ok('Service removed');
+  } else if (PLATFORM === 'linux') {
+    try { execSync('systemctl --user stop blorq 2>/dev/null',    { stdio: 'ignore' }); } catch {}
+    try { execSync('systemctl --user disable blorq 2>/dev/null', { stdio: 'ignore' }); } catch {}
+    try { fs.unlinkSync(systemdPath()); } catch {}
+    try { execSync('systemctl --user daemon-reload'); } catch {}
+    ok('Service removed');
+  } else if (PLATFORM === 'win32') {
+    try { execSync('sc stop Blorq',   { stdio: 'ignore' }); } catch {}
+    try { execSync('sc delete Blorq', { stdio: 'ignore' }); } catch {}
+    ok('Windows service removed');
+  }
+}
+
+function serviceStart() {
+  if (PLATFORM === 'darwin') {
+    execSync('launchctl load "' + plistPath() + '"');
+  } else if (PLATFORM === 'linux') {
+    execSync('systemctl --user start blorq');
+  } else if (PLATFORM === 'win32') {
+    execSync('sc start Blorq');
+  }
+  ok('Blorq service started');
+}
+
+function serviceStop() {
+  if (PLATFORM === 'darwin') {
+    try { execSync('launchctl unload "' + plistPath() + '"'); } catch {}
+  } else if (PLATFORM === 'linux') {
+    execSync('systemctl --user stop blorq');
+  } else if (PLATFORM === 'win32') {
+    execSync('sc stop Blorq');
+  }
+  ok('Blorq service stopped');
+}
+
+function serviceRestart() {
+  if (PLATFORM === 'darwin') {
+    try { execSync('launchctl unload "' + plistPath() + '" 2>/dev/null', { stdio:'ignore' }); } catch {}
+    execSync('launchctl load "' + plistPath() + '"');
+  } else if (PLATFORM === 'linux') {
+    execSync('systemctl --user restart blorq');
+  } else if (PLATFORM === 'win32') {
+    execSync('sc stop Blorq && sc start Blorq');
+  }
+  ok('Blorq service restarted');
+}
+
+function serviceLogs() {
+  if (PLATFORM === 'linux') {
+    // Use journalctl
+    const child = spawn('journalctl', ['--user', '-u', 'blorq', '-f', '--no-pager', '-n', '50'], { stdio: 'inherit' });
+    child.on('error', () => tailFile());
+  } else {
+    tailFile();
+  }
+}
+
+function tailFile() {
+  const f = path.join(os.homedir(), '.blorq', 'stdout.log');
+  if (!fs.existsSync(f)) {
+    warn('No log file yet: ' + f);
+    return;
+  }
+  info('Tailing ' + f + ' (Ctrl+C to stop)\n');
+  // Simple tail -f implementation
+  let pos = fs.statSync(f).size;
+  setInterval(() => {
+    const stat = fs.statSync(f);
+    if (stat.size > pos) {
+      const fd = fs.openSync(f, 'r');
+      const buf = Buffer.alloc(stat.size - pos);
+      fs.readSync(fd, buf, 0, buf.length, pos);
+      fs.closeSync(fd);
+      process.stdout.write(buf);
+      pos = stat.size;
+    }
+  }, 250);
+}
+
+// ─── setup ────────────────────────────────────────────────────────────────
+function cmdSetup() {
+  banner();
+  spawnSync(process.execPath, [path.join(BLORQ_DIR, 'setup.js')], { stdio: 'inherit', cwd: BLORQ_DIR });
+}
+
+// ─── help ─────────────────────────────────────────────────────────────────
+function cmdHelp() {
+  banner();
+  console.log(c('bold','  Usage') + '  blorq <command> [options]\n');
+  console.log(c('bold','  Commands:'));
+  const cmds = [
+    ['start',             'Start Blorq in foreground'],
+    ['start --background','Start Blorq in background'],
+    ['start --port 9900', 'Start on custom port'],
+    ['stop',              'Stop background instance'],
+    ['restart',           'Restart background instance'],
+    ['status',            'Show running status'],
+    ['setup',             'First-run: create data/, .env, users'],
+    ['open',              'Open dashboard in browser'],
+    ['service install',   'Register as OS service (starts on boot)'],
+    ['service uninstall', 'Remove OS service'],
+    ['service start',     'Start the OS service'],
+    ['service stop',      'Stop the OS service'],
+    ['service logs',      'Tail service logs'],
+    ['--version',         'Print version'],
+    ['--help',            'Print this help'],
+  ];
+  const pad = 26;
+  cmds.forEach(([cmd, desc]) => {
+    console.log('  ' + c('cyan', cmd.padEnd(pad)) + c('dim', desc));
+  });
+  console.log('');
+  console.log(c('bold','  Environment variables:'));
+  console.log('  ' + c('cyan','PORT'.padEnd(pad))    + c('dim','Server port (default: 9900)'));
+  console.log('  ' + c('cyan','DATA_DIR'.padEnd(pad))+ c('dim','Where to store data/ files'));
+  console.log('  ' + c('cyan','JWT_SECRET'.padEnd(pad))+c('dim','JWT signing secret (required in prod)'));
+  console.log('');
+  console.log('  Docs: ' + c('cyan','https://github.com/your-org/blorq') + '\n');
+}
+
+// ── Dispatch ──────────────────────────────────────────────────────────────
+switch (command) {
+  case 'start':           cmdStart();   break;
+  case 'stop':            cmdStop();    break;
+  case 'restart':         cmdRestart(); break;
+  case 'status':          cmdStatus();  break;
+  case 'setup':           cmdSetup();   break;
+  case 'open':            cmdOpen();    break;
+  case 'service':         cmdService(); break;
+  case '--version': case '-v':
+    console.log('blorq v' + VERSION);  break;
+  case '--help': case '-h': case 'help': default:
+    cmdHelp();
+}

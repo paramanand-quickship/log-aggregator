@@ -1,4 +1,25 @@
+# Dependencies
 node_modules/
+
+# Environment
 .env
+.env.local
+
+# Runtime data (user data — do NOT commit)
+data/users.json
+data/api-keys.json
+data/settings.json
+data/role-config.json
+
+# Logs
 logs/
 *.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
