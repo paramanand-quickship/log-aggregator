@@ -10,7 +10,14 @@
     "bin",
     "server.js",
     "setup.js",
+    "config.js",
     "config",
+    "lib",
+    "controllers",
+    "routes",
+    "services",
+    "middleware",
+    "views",
     "README.md"
   ],
   "scripts": {
