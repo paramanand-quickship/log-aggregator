@@ -1,6 +1,6 @@
 {
   "name": "blorq-cli",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "blorq-clinpm pkg fix — Production-grade open-source log aggregator. One-command install, runs as a system service on macOS, Linux & Windows.",
   "main": "server.js",
   "bin": {
