@@ -1,27 +1,22 @@
 {
   "name": "blorq",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Blorq — Production-grade open-source log aggregator. One-command install, runs as a system service on macOS, Linux & Windows.",
-  
   "main": "server.js",
-
   "bin": {
     "blorq": "./bin/blorq"
   },
-
   "files": [
     "bin",
     "server.js",
     "setup.js",
     "README.md"
   ],
-
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
     "setup": "node setup.js"
   },
-
   "keywords": [
     "logger",
     "logging",
@@ -43,20 +38,15 @@
     "debugging",
     "production-ready"
   ],
-
   "license": "MIT",
-
   "repository": {
     "type": "git",
     "url": "https://github.com/your-org/blorq"
   },
-
   "bugs": {
     "url": "https://github.com/your-org/blorq/issues"
   },
-
   "homepage": "https://github.com/your-org/blorq#readme",
-
   "dependencies": {
     "archiver": "^7.0.1",
     "axios": "^1.14.0",
@@ -70,14 +60,11 @@
     "qrcode": "^1.5.3",
     "speakeasy": "^2.0.0"
   },
-
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-
   "engines": {
     "node": ">=18.0.0"
   },
-
   "preferGlobal": true
 }
